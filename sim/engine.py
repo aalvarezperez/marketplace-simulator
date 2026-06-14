@@ -53,6 +53,15 @@ class Market:
         self.listings.append(listing)
         return listing
 
+    def create_listing_for(self, user, rng):
+        listing = self.add_listing(
+            quality=self.spec.listing_quality.draw(rng),
+            price=self.spec.listing_price.draw(rng),
+            seller_id=user.id,
+        )
+        self.emit("list", actor_id=user.id, entity_id=listing.id)
+        return listing
+
     def spawn_user(self):
         user = User(
             id=self._next_user_id,

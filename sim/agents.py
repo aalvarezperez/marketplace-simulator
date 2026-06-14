@@ -28,6 +28,7 @@ ENGAGEMENT_TIME_UNIT = 28.0   # days; sets the engagement -> visit-rate scale
 EPS = 1e-9
 VIEW_BASE, VIEW_SLOPE = 0.95, 1.0
 BUY_BASE, BUY_SLOPE = 0.175, 1.0
+LIST_BASE, LIST_SLOPE = 0.1, 1.0
 SESSION_K = 10                # listings shown per session
 
 
@@ -39,6 +40,11 @@ def p_view(engagement):
 def p_buy(engagement):
     e = max(engagement, EPS)
     return float(sigmoid(math.log(BUY_BASE) + BUY_SLOPE * math.log(e)))
+
+
+def p_list(engagement):
+    e = max(engagement, EPS)
+    return float(sigmoid(math.log(LIST_BASE) + LIST_SLOPE * math.log(e)))
 
 
 def _decide(p, rng):
@@ -56,6 +62,8 @@ def user_lifecycle(env, user, market, rng):
 
 def _run_session(user, market, rng):
     market.emit("visit", actor_id=user.id)
+    if _decide(p_list(user.engagement), rng):
+        market.create_listing_for(user, rng)
     for listing in market.match_listings(SESSION_K):
         if not listing.is_live:
             continue
