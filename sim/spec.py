@@ -39,7 +39,7 @@ class MarketplaceSpec:
     engagement: Property = field(
         default_factory=lambda: Property(gamma(a=2, scale=7 / 2)))
     response_time: Property = field(
-        default_factory=lambda: Property(gamma(a=2, scale=1 / 20)))
+        default_factory=lambda: Property(gamma(a=2, scale=1 / 2)))
     listings_per_user: Property = field(
         default_factory=lambda: Property(poisson(mu=0.6)))
     listing_quality: Property = field(
