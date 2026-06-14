@@ -19,6 +19,8 @@ class Listing:
     is_live: bool = True
     views: int = 0
     transactions: int = 0
+    leads: int = 0
+    bids: int = 0
 
 
 @dataclass
@@ -40,6 +42,9 @@ EPS = 1e-9
 VIEW_BASE, VIEW_SLOPE = 0.95, 1.0
 BUY_BASE, BUY_SLOPE = 0.175, 1.0
 LIST_BASE, LIST_SLOPE = 0.1, 1.0
+LEAD_BASE, LEAD_SLOPE = 0.35, 1.0
+BID_BASE, BID_SLOPE = 0.175, 1.0
+BID_BIAS = 0.9               # buyers bid below the ask
 SESSION_K = 10                # listings shown per session
 
 
@@ -56,6 +61,16 @@ def p_buy(engagement):
 def p_list(engagement):
     e = max(engagement, EPS)
     return float(sigmoid(math.log(LIST_BASE) + LIST_SLOPE * math.log(e)))
+
+
+def p_lead(engagement):
+    e = max(engagement, EPS)
+    return float(sigmoid(math.log(LEAD_BASE) + LEAD_SLOPE * math.log(e)))
+
+
+def p_bid(engagement):
+    e = max(engagement, EPS)
+    return float(sigmoid(math.log(BID_BASE) + BID_SLOPE * math.log(e)))
 
 
 def _decide(p, rng):
@@ -78,12 +93,30 @@ def _run_session(user, market, rng):
     for listing in market.match_listings(SESSION_K):
         if not listing.is_live:
             continue
-        if _decide(p_view(user.engagement), rng):
-            listing.views += 1
-            market.emit("view", actor_id=user.id,
+        if not _decide(p_view(user.engagement), rng):
+            continue
+        listing.views += 1
+        market.emit("view", actor_id=user.id,
+                    entity_id=listing.id, other_id=listing.seller_id)
+        if not listing.is_live:
+            continue
+        if _decide(p_buy(user.engagement), rng):
+            market.transact(user, listing)            # buy now
+        elif _decide(p_lead(user.engagement), rng):
+            listing.leads += 1
+            market.emit("lead", actor_id=user.id,
                         entity_id=listing.id, other_id=listing.seller_id)
-            if listing.is_live and _decide(p_buy(user.engagement), rng):
-                market.transact(user, listing)
+            if _decide(p_bid(user.engagement), rng):
+                seller = market.get_user(listing.seller_id)
+                if seller is not None and seller.inbox is not None:
+                    amount = BID_BIAS * listing.price
+                    proposal = market.make_proposal(
+                        buyer=user, seller=seller, listing=listing, amount=amount)
+                    market.send_to_seller(proposal)
+                    listing.bids += 1
+                    market.emit("bid", actor_id=user.id, entity_id=listing.id,
+                                other_id=seller.id,
+                                payload={"proposal_id": proposal.id, "amount": amount})
 
 
 def population_arrival(env, market, rng):

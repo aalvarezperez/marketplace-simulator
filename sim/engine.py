@@ -29,6 +29,7 @@ class Market:
         self.recorder = recorder
         self.spec = spec
         self.users = []
+        self.users_by_id = {}
         self.listings = []
         self._next_user_id = 0
         self._next_listing_id = 0
@@ -71,6 +72,7 @@ class Market:
         self._next_user_id += 1
         user.inbox = simpy.Store(self.env)
         self.users.append(user)
+        self.users_by_id[user.id] = user
         self.emit("register", actor_id=user.id)
         self.env.process(user_lifecycle(self.env, user, self, self.rng))
         return user
@@ -84,6 +86,9 @@ class Market:
     def send_to_seller(self, proposal):
         proposal.status = "with_seller"
         proposal.seller.inbox.put(proposal)
+
+    def get_user(self, user_id):
+        return self.users_by_id.get(user_id)
 
     def send_to_buyer(self, proposal):
         proposal.status = "with_buyer"
