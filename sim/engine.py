@@ -1,5 +1,8 @@
 from datetime import timedelta
 
+import numpy as np
+import simpy
+
 
 class Clock:
     """Maps SimPy float time (in days) to calendar datetimes."""
@@ -12,7 +15,8 @@ class Clock:
 
 
 from sim.agents import Listing, User, user_lifecycle
-from sim.events import Event
+from sim.agents import population_arrival
+from sim.events import Event, EventRecorder
 
 
 class Market:
@@ -68,3 +72,36 @@ class Market:
             listing.is_live = False
         self.emit("transaction", actor_id=user.id,
                   entity_id=listing.id, other_id=listing.seller_id)
+
+
+class Marketplace:
+    """User-facing handle: build from a spec, run, read the event stream."""
+
+    def __init__(self, market):
+        self.market = market
+
+    @classmethod
+    def from_spec(cls, spec):
+        env = simpy.Environment()
+        rng = np.random.default_rng(spec.seed)
+        market = Market(env=env, rng=rng, clock=Clock(spec.start),
+                        recorder=EventRecorder(), spec=spec)
+        # Seed users at t0 (each starts its own lifecycle process) + their listings.
+        for _ in range(spec.n_seed_users):
+            user = market.spawn_user()
+            for _ in range(int(spec.listings_per_user.draw(rng))):
+                market.add_listing(
+                    quality=spec.listing_quality.draw(rng),
+                    price=spec.listing_price.draw(rng),
+                    seller_id=user.id,
+                )
+        env.process(population_arrival(env, market, rng))
+        return cls(market)
+
+    def run(self, until=None):
+        self.market.env.run(until=self.market.spec.until if until is None else until)
+        return self.events
+
+    @property
+    def events(self):
+        return self.market.recorder.events
