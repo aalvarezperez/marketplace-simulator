@@ -66,3 +66,11 @@ def _run_session(user, market, rng):
             if listing.is_live and _decide(p_buy(user.engagement), rng):
                 market.transact(user, listing)
 
+
+def population_arrival(env, market, rng):
+    """Mint new users over time at spec.arrival_rate (users per day)."""
+    rate = market.spec.arrival_rate
+    while rate > 0:
+        yield env.timeout(float(rng.exponential(1.0 / rate)))
+        market.spawn_user()
+
