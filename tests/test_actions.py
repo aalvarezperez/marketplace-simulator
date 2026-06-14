@@ -50,3 +50,26 @@ def test_default_funnel_preconditions():
     assert by["view"].requires == ("search",)
     assert by["consideration"].requires == ("view",)
     assert by["buy"].requires == ("consideration",)
+
+
+def test_engine_runs_funnel_via_action_runner():
+    from datetime import datetime
+    from sim.engine import Marketplace
+    from sim.spec import MarketplaceSpec
+    events = Marketplace.from_spec(
+        MarketplaceSpec(start=datetime(2026, 1, 1), n_seed_users=100, until=5.0, seed=1)).run()
+    kinds = {e.event_type for e in events}
+    assert {"visit", "view"} <= kinds
+
+
+def test_action_runner_full_run_reproducible():
+    from datetime import datetime
+    from sim.engine import Marketplace
+    from sim.spec import MarketplaceSpec
+
+    def run():
+        return [(e.event_type, e.actor_id, e.entity_id)
+                for e in Marketplace.from_spec(
+                    MarketplaceSpec(start=datetime(2026, 1, 1), n_seed_users=80,
+                                    until=5.0, seed=3)).run()]
+    assert run() == run()

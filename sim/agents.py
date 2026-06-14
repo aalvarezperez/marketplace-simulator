@@ -93,43 +93,10 @@ def user_lifecycle(env, user, market, rng):
         yield env.timeout(float(rng.exponential(scale)))
         if user.state != "active":
             break
-        _run_session(user, market, rng)
+        market.run_session(user, rng)
         if _decide(p_churn(user.engagement), rng):
             market.churn_user(user)
             break
-
-
-def _run_session(user, market, rng):
-    market.emit("visit", actor_id=user.id)
-    if _decide(p_list(user.engagement), rng):
-        market.create_listing_for(user, rng)
-    for listing in market.match_listings(SESSION_K):
-        if not listing.is_live:
-            continue
-        if not _decide(p_view(user.engagement), rng):
-            continue
-        listing.views += 1
-        market.emit("view", actor_id=user.id,
-                    entity_id=listing.id, other_id=listing.seller_id)
-        if not listing.is_live:
-            continue
-        if _decide(p_buy(user.engagement), rng):
-            market.transact(user, listing)            # buy now
-        elif _decide(p_lead(user.engagement), rng):
-            listing.leads += 1
-            market.emit("lead", actor_id=user.id,
-                        entity_id=listing.id, other_id=listing.seller_id)
-            if _decide(p_bid(user.engagement), rng):
-                seller = market.get_user(listing.seller_id)
-                if seller is not None and seller.inbox is not None:
-                    amount = BID_BIAS * listing.price
-                    proposal = market.make_proposal(
-                        buyer=user, seller=seller, listing=listing, amount=amount)
-                    market.send_to_seller(proposal)
-                    listing.bids += 1
-                    market.emit("bid", actor_id=user.id, entity_id=listing.id,
-                                other_id=seller.id,
-                                payload={"proposal_id": proposal.id, "amount": amount})
 
 
 def population_arrival(env, market, rng):

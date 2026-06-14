@@ -18,6 +18,7 @@ from sim.agents import Listing, Proposal, User, user_lifecycle
 from sim.agents import population_arrival, settlement_process, proposal_expiry
 from sim.agents import reactivation, listing_expiry
 from sim.events import Event, EventRecorder
+from sim.actions import default_consumer_funnel, run_session as _run_session_actions
 
 
 class Market:
@@ -29,6 +30,7 @@ class Market:
         self.clock = clock
         self.recorder = recorder
         self.spec = spec
+        self.actions = default_consumer_funnel()
         self.users = []
         self.users_by_id = {}
         self.listings = []
@@ -44,6 +46,9 @@ class Market:
         w = np.array([weights[n] for n in names], dtype=float)
         w = w / w.sum()
         return names[int(rng.choice(len(names), p=w))]
+
+    def run_session(self, user, rng):
+        return _run_session_actions(user, self, rng, self.actions)
 
     def emit(self, event_type, actor_id=None, entity_id=None, other_id=None, payload=None):
         if actor_id is not None:
