@@ -36,6 +36,8 @@ class MarketplaceSpec:
     until: float = 7.0            # sim-days to run
     arrival_rate: float = 5.0     # new users per day (population arrival)
     proposal_expiry_days: float = 3.0
+    reactivation_scale_days: float = 30.0
+    listing_ttl_days: float = 30.0      # set to None to disable listing expiry
     variant_weights: dict = field(default_factory=lambda: {"CONTROL": 1.0})
     engagement: Property = field(
         default_factory=lambda: Property(gamma(a=2, scale=7 / 2)))

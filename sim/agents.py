@@ -8,6 +8,7 @@ class User:
     response_time: float
     inbox: object = None   # a simpy.Store, assigned at spawn time
     variant: str = "CONTROL"
+    state: str = "active"      # active | dormant
 
 
 @dataclass
@@ -47,6 +48,7 @@ LEAD_BASE, LEAD_SLOPE = 0.35, 1.0
 BID_BASE, BID_SLOPE = 0.175, 1.0
 BID_BIAS = 0.9               # buyers bid below the ask
 SESSION_K = 10                # listings shown per session
+CHURN_BASE, CHURN_SLOPE = 0.1, 1.0
 
 
 def p_view(engagement):
@@ -74,17 +76,27 @@ def p_bid(engagement):
     return float(sigmoid(math.log(BID_BASE) + BID_SLOPE * math.log(e)))
 
 
+def p_churn(engagement):
+    e = max(engagement, EPS)
+    return float(sigmoid(math.log(CHURN_BASE) - CHURN_SLOPE * math.log(e)))
+
+
 def _decide(p, rng):
     return rng.random() < p
 
 
 def user_lifecycle(env, user, market, rng):
     """Persistent per-agent process: wake on an engagement-driven schedule,
-    run a session, repeat for the life of the simulation."""
-    while True:
+    run a session, repeat until churn or sim end."""
+    while user.state == "active":
         scale = ENGAGEMENT_TIME_UNIT / max(user.engagement, EPS)
         yield env.timeout(float(rng.exponential(scale)))
+        if user.state != "active":
+            break
         _run_session(user, market, rng)
+        if _decide(p_churn(user.engagement), rng):
+            market.churn_user(user)
+            break
 
 
 def _run_session(user, market, rng):
@@ -126,6 +138,20 @@ def population_arrival(env, market, rng):
     while rate > 0:
         yield env.timeout(float(rng.exponential(1.0 / rate)))
         market.spawn_user()
+
+
+def reactivation(env, user, market, rng):
+    yield env.timeout(float(rng.exponential(max(market.spec.reactivation_scale_days, EPS))))
+    user.state = "active"
+    market.emit("reactivated", actor_id=user.id)
+    env.process(user_lifecycle(env, user, market, rng))
+
+
+def listing_expiry(env, listing, market):
+    yield env.timeout(max(market.spec.listing_ttl_days, EPS))
+    if listing.is_live:
+        listing.is_live = False
+        market.emit("listing_expired", actor_id=listing.seller_id, entity_id=listing.id)
 
 
 def settlement_process(env, user, market, rng):

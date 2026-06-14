@@ -16,6 +16,7 @@ class Clock:
 
 from sim.agents import Listing, Proposal, User, user_lifecycle
 from sim.agents import population_arrival, settlement_process, proposal_expiry
+from sim.agents import reactivation, listing_expiry
 from sim.events import Event, EventRecorder
 
 
@@ -69,6 +70,8 @@ class Market:
                           price=float(price), seller_id=seller_id)
         self._next_listing_id += 1
         self.listings.append(listing)
+        if self.spec.listing_ttl_days is not None:
+            self.env.process(listing_expiry(self.env, listing, self))
         return listing
 
     def create_listing_for(self, user, rng):
@@ -108,6 +111,11 @@ class Market:
 
     def get_user(self, user_id):
         return self.users_by_id.get(user_id)
+
+    def churn_user(self, user):
+        user.state = "dormant"
+        self.emit("churned", actor_id=user.id)
+        self.env.process(reactivation(self.env, user, self, self.rng))
 
     def send_to_buyer(self, proposal):
         proposal.status = "with_buyer"
