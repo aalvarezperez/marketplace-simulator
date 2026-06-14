@@ -45,7 +45,24 @@ def _decide(p, rng):
     return rng.random() < p
 
 
-# TEMPORARY stub — replaced in Task 8
 def user_lifecycle(env, user, market, rng):
-    yield env.timeout(0)
+    """Persistent per-agent process: wake on an engagement-driven schedule,
+    run a session, repeat for the life of the simulation."""
+    while True:
+        scale = ENGAGEMENT_TIME_UNIT / max(user.engagement, EPS)
+        yield env.timeout(float(rng.exponential(scale)))
+        _run_session(user, market, rng)
+
+
+def _run_session(user, market, rng):
+    market.emit("visit", actor_id=user.id)
+    for listing in market.match_listings(SESSION_K):
+        if not listing.is_live:
+            continue
+        if _decide(p_view(user.engagement), rng):
+            listing.views += 1
+            market.emit("view", actor_id=user.id,
+                        entity_id=listing.id, other_id=listing.seller_id)
+            if listing.is_live and _decide(p_buy(user.engagement), rng):
+                market.transact(user, listing)
 
