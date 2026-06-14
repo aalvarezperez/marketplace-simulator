@@ -9,3 +9,62 @@ class Clock:
 
     def to_datetime(self, now):
         return self.start + timedelta(days=float(now))
+
+
+from sim.agents import Listing, User, user_lifecycle
+from sim.events import Event
+
+
+class Market:
+    """Runtime state + helpers shared by all agent processes."""
+
+    def __init__(self, env, rng, clock, recorder, spec):
+        self.env = env
+        self.rng = rng
+        self.clock = clock
+        self.recorder = recorder
+        self.spec = spec
+        self.users = []
+        self.listings = []
+        self._next_user_id = 0
+        self._next_listing_id = 0
+
+    def emit(self, event_type, actor_id=None, entity_id=None, other_id=None):
+        self.recorder.record(Event(
+            self.clock.to_datetime(self.env.now),
+            event_type, actor_id, entity_id, other_id,
+        ))
+
+    def live_listings(self):
+        return [l for l in self.listings if l.is_live]
+
+    def match_listings(self, k):
+        return sorted(self.live_listings(),
+                      key=lambda l: l.quality, reverse=True)[:k]
+
+    def add_listing(self, quality, price, seller_id):
+        listing = Listing(id=self._next_listing_id, quality=float(quality),
+                          price=float(price), seller_id=seller_id)
+        self._next_listing_id += 1
+        self.listings.append(listing)
+        return listing
+
+    def spawn_user(self):
+        user = User(
+            id=self._next_user_id,
+            engagement=float(self.spec.engagement.draw(self.rng)),
+            response_time=float(self.spec.response_time.draw(self.rng)),
+        )
+        self._next_user_id += 1
+        self.users.append(user)
+        self.emit("register", actor_id=user.id)
+        self.env.process(user_lifecycle(self.env, user, self, self.rng))
+        return user
+
+    def transact(self, user, listing):
+        listing.stock -= 1
+        listing.transactions += 1
+        if listing.stock <= 0:
+            listing.is_live = False
+        self.emit("transaction", actor_id=user.id,
+                  entity_id=listing.id, other_id=listing.seller_id)

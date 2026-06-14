@@ -1,3 +1,25 @@
+from dataclasses import dataclass
+
+
+@dataclass
+class User:
+    id: int
+    engagement: float
+    response_time: float
+
+
+@dataclass
+class Listing:
+    id: int
+    quality: float
+    price: float
+    seller_id: int
+    stock: int = 1
+    is_live: bool = True
+    views: int = 0
+    transactions: int = 0
+
+
 import math
 
 from func import sigmoid
@@ -21,3 +43,9 @@ def p_buy(engagement):
 
 def _decide(p, rng):
     return rng.random() < p
+
+
+# TEMPORARY stub — replaced in Task 8
+def user_lifecycle(env, user, market, rng):
+    yield env.timeout(0)
+
