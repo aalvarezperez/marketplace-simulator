@@ -104,10 +104,45 @@ is what actually runs — the import is dead weight.
 JSON lines to `marketplace.log`. Most `logger.info(...)` calls in `classes.py` are commented out,
 so the log is usually empty.
 
+## Experimental SimPy engine (`sim/`)
+
+A continuous-time re-platform of the daily-loop engine lives in `sim/` (branch
+`experimental/simpy-replatform`). It is **additive** — the legacy `classes.py` is
+untouched. Design + scope: `docs/specs/2026-06-14-simpy-replatform-prd.md`; the
+implementation plan: `docs/superpowers/plans/2026-06-14-simpy-replatform-slice.md`.
+
+- `sim/spec.py` — `Property` (literal | scipy dist | callable) and `MarketplaceSpec`.
+- `sim/events.py` — `Event` + in-memory `EventRecorder` (no threads; optional `write_jsonl`).
+  Deliberately does **not** use `logger_setup.EventLogger` (its daemon thread + singleton
+  break determinism and the no-threads guarantee).
+- `sim/agents.py` — `User`/`Listing`, funnel probabilities, `user_lifecycle` +
+  `population_arrival` SimPy processes.
+- `sim/engine.py` — `Clock` (sim-days → datetime), `Market` runtime, `Marketplace.from_spec`/`run`.
+
+Run it (from the repo root, using `python` = the conda base interpreter that has numpy/scipy):
+
+```python
+from datetime import datetime
+from sim.engine import Marketplace
+from sim.spec import MarketplaceSpec
+
+mkt = Marketplace.from_spec(MarketplaceSpec(start=datetime(2026, 1, 1),
+                                            n_seed_users=1000, until=7.0, seed=42))
+events = mkt.run()   # list[Event], each with a datetime sim_time
+```
+
+Tests: `python -m pytest` from the repo root. Smoke harness: `python scripts/run_slice.py`.
+The engine is single-threaded and deterministic: same spec + same `seed` → identical events.
+Base time unit is **days** (`env.now` in days; `until` is sim-days).
+
 ## Files
 
-- `classes.py` — the entire engine (Marketplace, User, Listing, Proposal, Variant).
-- `func.py` — `sigmoid()`.
-- `logger_setup.py` — threaded singleton `EventLogger`.
-- `test_nb.ipynb` — run + profile the sim.
+- `classes.py` — the legacy daily-loop engine (Marketplace, User, Listing, Proposal, Variant); frozen.
+- `sim/` — the experimental SimPy engine (see section above).
+- `func.py` — `sigmoid()` (shared by both engines).
+- `logger_setup.py` — threaded singleton `EventLogger` (legacy engine only).
+- `test_nb.ipynb` — run + profile the legacy sim.
+- `scripts/run_slice.py` — smoke + reproducibility harness for the SimPy engine.
+- `requirements.txt` — deps for the SimPy slice (`simpy`, `numpy`, `scipy`, `pytest`).
 - `Design principles.md` — author's design intent (generic entities, fixed-as-dynamic, recursive markets).
+- `docs/` — PRD + implementation plan for the SimPy re-platform.
