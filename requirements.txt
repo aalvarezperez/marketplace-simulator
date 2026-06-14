@@ -1,0 +1,7 @@
+# SimPy slice engine
+simpy>=4,<5
+numpy
+scipy
+pytest
+# Note: the legacy classes.py additionally needs scikit-learn, python-json-logger,
+# and jupyter_server; those are not required for the sim/ slice or its tests.
