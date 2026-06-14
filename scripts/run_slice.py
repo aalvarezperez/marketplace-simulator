@@ -2,9 +2,15 @@
 
 Usage (from repo root):  python scripts/run_slice.py
 """
+import os
+import sys
 import time
 from collections import Counter
 from datetime import datetime
+
+# Allow running as a plain script (`python scripts/run_slice.py`) from any cwd:
+# CPython puts this file's dir (scripts/) on sys.path, not the repo root.
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from sim.engine import Marketplace
 from sim.spec import MarketplaceSpec
