@@ -19,7 +19,7 @@ class Property:
 from dataclasses import dataclass, field
 from datetime import datetime
 
-from scipy.stats import gamma, lognorm, norm, poisson
+from scipy.stats import gamma, lognorm, poisson
 
 from sim.pricing import EndogenousPrice
 

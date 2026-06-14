@@ -107,17 +107,35 @@ so the log is usually empty.
 ## Experimental SimPy engine (`sim/`)
 
 A continuous-time re-platform of the daily-loop engine lives in `sim/` (branch
-`experimental/simpy-replatform`). It is **additive** — the legacy `classes.py` is
-untouched. Design + scope: `docs/specs/2026-06-14-simpy-replatform-prd.md`; the
-implementation plan: `docs/superpowers/plans/2026-06-14-simpy-replatform-slice.md`.
+`experimental/simpy-replatform`, targeting a v2.0 release). It is **additive** — the legacy
+`classes.py` is untouched. Design + scope: `docs/specs/2026-06-14-simpy-replatform-prd.md`;
+slice plan: `docs/superpowers/plans/2026-06-14-simpy-replatform-slice.md`; Phase 2 (parity)
+roadmap: `docs/specs/2026-06-14-phase2-roadmap.md`.
 
-- `sim/spec.py` — `Property` (literal | scipy dist | callable) and `MarketplaceSpec`.
-- `sim/events.py` — `Event` + in-memory `EventRecorder` (no threads; optional `write_jsonl`).
-  Deliberately does **not** use `logger_setup.EventLogger` (its daemon thread + singleton
-  break determinism and the no-threads guarantee).
-- `sim/agents.py` — `User`/`Listing`, funnel probabilities, `user_lifecycle` +
-  `population_arrival` SimPy processes.
-- `sim/engine.py` — `Clock` (sim-days → datetime), `Market` runtime, `Marketplace.from_spec`/`run`.
+Full funnel, in continuous time: users arrive over time and run sessions on an engagement-driven
+schedule; sellers **list**; buyers **view → (buy-now | lead → bid)**; a bid creates a **`Proposal`**
+routed buyer↔seller through SimPy `Store` inboxes; sellers **accept** and buyers **pay** after
+`response_time` latency; proposals **expire**; prices are **endogenous** (regression on visible
+listings); users carry an A/B **variant**; users **churn / reactivate** and listings **expire**.
+
+- `sim/spec.py` — `Property` (literal | scipy dist | callable | context-aware model, via
+  `draw(rng, context)`) and `MarketplaceSpec` (all knobs: arrival/expiry/variant_weights/TTL/etc.).
+- `sim/pricing.py` — `EndogenousPrice` (a `Property` value): `LinearRegression` price~quality on the
+  top-k visible listings, with a quality-anchored prior to bootstrap price variation.
+- `sim/events.py` — `Event` (with optional `payload`) + in-memory `EventRecorder` (no threads;
+  optional `write_jsonl`). Deliberately does **not** use `logger_setup.EventLogger` (its daemon
+  thread + singleton break determinism and the no-threads guarantee).
+- `sim/agents.py` — `User`/`Listing`/`Proposal`, funnel probabilities, and the SimPy processes:
+  `user_lifecycle`, `population_arrival`, `settlement_process`, `proposal_expiry`, `reactivation`,
+  `listing_expiry`.
+- `sim/engine.py` — `Clock` (sim-days → datetime), `Market` runtime (emit, matching, proposals,
+  settlement, churn), `Marketplace.from_spec`/`run`.
+
+**Calibration caveat:** with default knobs the negotiation funnel rarely settles — instant buy-now
+clears `stock=1` listings before latency-delayed bids can be accepted, so most bids become
+`proposal_rejected`. The settlement pipeline is correct (see `tests/test_settlement.py`); making
+negotiation a meaningful share of transactions is a tuning task (stock > 1, lower buy-now rate, or
+faster `response_time`).
 
 Run it (from the repo root, using `python` = the conda base interpreter that has numpy/scipy):
 
