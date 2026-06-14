@@ -15,7 +15,7 @@ class Clock:
 
 
 from sim.agents import Listing, Proposal, User, user_lifecycle
-from sim.agents import population_arrival
+from sim.agents import population_arrival, settlement_process, proposal_expiry
 from sim.events import Event, EventRecorder
 
 
@@ -75,12 +75,14 @@ class Market:
         self.users_by_id[user.id] = user
         self.emit("register", actor_id=user.id)
         self.env.process(user_lifecycle(self.env, user, self, self.rng))
+        self.env.process(settlement_process(self.env, user, self, self.rng))
         return user
 
     def make_proposal(self, buyer, seller, listing, amount):
         proposal = Proposal(id=self._next_proposal_id, buyer=buyer, seller=seller,
                             listing=listing, amount=float(amount))
         self._next_proposal_id += 1
+        self.env.process(proposal_expiry(self.env, proposal, self))
         return proposal
 
     def send_to_seller(self, proposal):
@@ -101,6 +103,41 @@ class Market:
             listing.is_live = False
         self.emit("transaction", actor_id=user.id,
                   entity_id=listing.id, other_id=listing.seller_id)
+
+    def evaluate_proposal(self, proposal):
+        """Seller side: accept if the listing is still live, else reject."""
+        if proposal.status != "with_seller":
+            return
+        listing = proposal.listing
+        if listing.is_live:
+            self.emit("accepted", actor_id=proposal.seller.id, entity_id=listing.id,
+                      other_id=proposal.buyer.id,
+                      payload={"proposal_id": proposal.id, "amount": proposal.amount})
+            self.send_to_buyer(proposal)   # sets status with_buyer, routes to buyer inbox
+        else:
+            proposal.status = "rejected"
+            self.emit("proposal_rejected", actor_id=proposal.seller.id,
+                      entity_id=listing.id, other_id=proposal.buyer.id,
+                      payload={"proposal_id": proposal.id})
+
+    def settle_proposal(self, proposal):
+        """Buyer side: pay if the listing is still live, else the deal is lost."""
+        if proposal.status != "with_buyer":
+            return
+        listing = proposal.listing
+        if listing.is_live:
+            listing.stock -= 1
+            listing.transactions += 1
+            if listing.stock <= 0:
+                listing.is_live = False
+            proposal.status = "paid"
+            self.emit("paid", actor_id=proposal.buyer.id, entity_id=listing.id,
+                      other_id=proposal.seller.id,
+                      payload={"proposal_id": proposal.id, "amount": proposal.amount})
+        else:
+            proposal.status = "lost"
+            self.emit("proposal_lost", actor_id=proposal.buyer.id, entity_id=listing.id,
+                      other_id=proposal.seller.id, payload={"proposal_id": proposal.id})
 
 
 class Marketplace:

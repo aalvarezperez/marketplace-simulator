@@ -126,3 +126,27 @@ def population_arrival(env, market, rng):
         yield env.timeout(float(rng.exponential(1.0 / rate)))
         market.spawn_user()
 
+
+def settlement_process(env, user, market, rng):
+    """React to this user's inbox: as seller, accept incoming bids after a
+    response_time latency; as buyer, pay accepted proposals after a latency."""
+    while True:
+        proposal = yield user.inbox.get()
+        if proposal.status == "with_seller":
+            yield env.timeout(max(user.response_time, EPS))
+            market.evaluate_proposal(proposal)
+        elif proposal.status == "with_buyer":
+            yield env.timeout(max(user.response_time, EPS))
+            market.settle_proposal(proposal)
+        # any other status (e.g. expired): drop it
+
+
+def proposal_expiry(env, proposal, market):
+    """Move a proposal to 'expired' if it hasn't terminated by the expiry window."""
+    yield env.timeout(max(market.spec.proposal_expiry_days, EPS))
+    if proposal.status in ("created", "with_seller", "accepted", "with_buyer"):
+        proposal.status = "expired"
+        market.emit("proposal_expired", actor_id=proposal.buyer.id,
+                    entity_id=proposal.listing.id, other_id=proposal.seller.id,
+                    payload={"proposal_id": proposal.id})
+

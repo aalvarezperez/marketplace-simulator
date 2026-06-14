@@ -18,8 +18,7 @@ def test_lead_and_bid_events_and_proposals_in_full_run():
     kinds = {e.event_type for e in events}
     assert "lead" in kinds
     assert "bid" in kinds
-    # bids route proposals into seller inboxes; no settlement yet, so some sit there
-    assert any(len(u.inbox.items) > 0 for u in mkt.market.users)
+    assert mkt.market._next_proposal_id > 0   # bids created proposals (now settled by Epic E)
     # a bid event carries its amount in the payload
     bid_events = [e for e in events if e.event_type == "bid"]
     assert bid_events and bid_events[0].payload is not None and "amount" in bid_events[0].payload
