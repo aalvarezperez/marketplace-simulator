@@ -14,7 +14,7 @@ class Clock:
         return self.start + timedelta(days=float(now))
 
 
-from sim.agents import Listing, User, user_lifecycle
+from sim.agents import Listing, Proposal, User, user_lifecycle
 from sim.agents import population_arrival
 from sim.events import Event, EventRecorder
 
@@ -32,11 +32,12 @@ class Market:
         self.listings = []
         self._next_user_id = 0
         self._next_listing_id = 0
+        self._next_proposal_id = 0
 
-    def emit(self, event_type, actor_id=None, entity_id=None, other_id=None):
+    def emit(self, event_type, actor_id=None, entity_id=None, other_id=None, payload=None):
         self.recorder.record(Event(
             self.clock.to_datetime(self.env.now),
-            event_type, actor_id, entity_id, other_id,
+            event_type, actor_id, entity_id, other_id, payload,
         ))
 
     def live_listings(self):
@@ -68,10 +69,25 @@ class Market:
             response_time=float(self.spec.response_time.draw(self.rng)),
         )
         self._next_user_id += 1
+        user.inbox = simpy.Store(self.env)
         self.users.append(user)
         self.emit("register", actor_id=user.id)
         self.env.process(user_lifecycle(self.env, user, self, self.rng))
         return user
+
+    def make_proposal(self, buyer, seller, listing, amount):
+        proposal = Proposal(id=self._next_proposal_id, buyer=buyer, seller=seller,
+                            listing=listing, amount=float(amount))
+        self._next_proposal_id += 1
+        return proposal
+
+    def send_to_seller(self, proposal):
+        proposal.status = "with_seller"
+        proposal.seller.inbox.put(proposal)
+
+    def send_to_buyer(self, proposal):
+        proposal.status = "with_buyer"
+        proposal.buyer.inbox.put(proposal)
 
     def transact(self, user, listing):
         listing.stock -= 1

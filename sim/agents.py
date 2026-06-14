@@ -6,6 +6,7 @@ class User:
     id: int
     engagement: float
     response_time: float
+    inbox: object = None   # a simpy.Store, assigned at spawn time
 
 
 @dataclass
@@ -18,6 +19,16 @@ class Listing:
     is_live: bool = True
     views: int = 0
     transactions: int = 0
+
+
+@dataclass
+class Proposal:
+    id: int
+    buyer: object
+    seller: object
+    listing: object
+    amount: float
+    status: str = "created"   # created -> with_seller -> accepted -> with_buyer -> paid (or expired)
 
 
 import math

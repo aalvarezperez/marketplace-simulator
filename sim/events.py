@@ -11,6 +11,7 @@ class Event:
     actor_id: Optional[int] = None
     entity_id: Optional[int] = None
     other_id: Optional[int] = None
+    payload: Optional[dict] = None
 
 
 class EventRecorder:
@@ -35,4 +36,5 @@ class EventRecorder:
                     "actor_id": e.actor_id,
                     "entity_id": e.entity_id,
                     "other_id": e.other_id,
+                    "payload": e.payload,
                 }) + "\n")
