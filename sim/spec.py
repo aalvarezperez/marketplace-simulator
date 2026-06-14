@@ -39,6 +39,7 @@ class MarketplaceSpec:
     reactivation_scale_days: float = 30.0
     listing_ttl_days: float = 30.0      # set to None to disable listing expiry
     variant_weights: dict = field(default_factory=lambda: {"CONTROL": 1.0})
+    actions: list = field(default_factory=list)
     engagement: Property = field(
         default_factory=lambda: Property(gamma(a=2, scale=7 / 2)))
     response_time: Property = field(

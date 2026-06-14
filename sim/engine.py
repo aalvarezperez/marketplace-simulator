@@ -18,7 +18,7 @@ from sim.agents import Listing, Proposal, User, user_lifecycle
 from sim.agents import population_arrival, settlement_process, proposal_expiry
 from sim.agents import reactivation, listing_expiry
 from sim.events import Event, EventRecorder
-from sim.actions import default_consumer_funnel, run_session as _run_session_actions
+from sim.actions import assemble_actions, default_consumer_funnel, run_session as _run_session_actions
 
 
 class Market:
@@ -30,7 +30,7 @@ class Market:
         self.clock = clock
         self.recorder = recorder
         self.spec = spec
-        self.actions = default_consumer_funnel()
+        self.actions = assemble_actions(default_consumer_funnel(), spec.actions)
         self.users = []
         self.users_by_id = {}
         self.listings = []

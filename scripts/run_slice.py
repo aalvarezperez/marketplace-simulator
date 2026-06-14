@@ -12,6 +12,7 @@ from datetime import datetime
 # CPython puts this file's dir (scripts/) on sys.path, not the repo root.
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+from sim.actions import negotiate_action
 from sim.engine import Marketplace
 from sim.spec import MarketplaceSpec
 
@@ -22,7 +23,8 @@ def _signature(events):
 
 def main():
     spec = MarketplaceSpec(start=datetime(2026, 1, 1), n_seed_users=1000,
-                           until=7.0, arrival_rate=20.0, seed=42)
+                           until=7.0, arrival_rate=20.0, seed=42,
+                           actions=[negotiate_action()])
 
     t0 = time.perf_counter()
     mkt = Marketplace.from_spec(spec)
