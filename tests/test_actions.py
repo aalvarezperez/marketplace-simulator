@@ -33,3 +33,20 @@ def test_session_dict_threads_between_actions():
     run_session(None, None, np.random.default_rng(0),
                 [Action("produce", produce), Action("cap", capture, requires=("produce",))])
     assert captured["candidates"] == [1, 2, 3]
+
+
+def test_default_funnel_names_and_order():
+    from sim.actions import default_consumer_funnel
+    names = [a.name for a in default_consumer_funnel()]
+    assert names == ["visit", "list", "search", "view", "consideration", "buy"]
+
+
+def test_default_funnel_preconditions():
+    from sim.actions import default_consumer_funnel
+    by = {a.name: a for a in default_consumer_funnel()}
+    assert by["visit"].requires == ()
+    assert by["list"].requires == ("visit",)
+    assert by["search"].requires == ("visit",)
+    assert by["view"].requires == ("search",)
+    assert by["consideration"].requires == ("view",)
+    assert by["buy"].requires == ("consideration",)
