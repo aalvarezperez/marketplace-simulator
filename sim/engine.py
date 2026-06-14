@@ -54,11 +54,10 @@ class Market:
         return listing
 
     def create_listing_for(self, user, rng):
-        listing = self.add_listing(
-            quality=self.spec.listing_quality.draw(rng),
-            price=self.spec.listing_price.draw(rng),
-            seller_id=user.id,
-        )
+        quality = self.spec.listing_quality.draw(rng)
+        price = self.spec.listing_price.draw(
+            rng, context={"market": self, "quality": quality, "seller": user})
+        listing = self.add_listing(quality=quality, price=price, seller_id=user.id)
         self.emit("list", actor_id=user.id, entity_id=listing.id)
         return listing
 
@@ -99,11 +98,10 @@ class Marketplace:
         for _ in range(spec.n_seed_users):
             user = market.spawn_user()
             for _ in range(int(spec.listings_per_user.draw(rng))):
-                market.add_listing(
-                    quality=spec.listing_quality.draw(rng),
-                    price=spec.listing_price.draw(rng),
-                    seller_id=user.id,
-                )
+                quality = spec.listing_quality.draw(rng)
+                price = spec.listing_price.draw(
+                    rng, context={"market": market, "quality": quality})
+                market.add_listing(quality=quality, price=price, seller_id=user.id)
         env.process(population_arrival(env, market, rng))
         return cls(market)
 

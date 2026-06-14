@@ -2,6 +2,7 @@
 simpy>=4,<5
 numpy
 scipy
+scikit-learn
 pytest
-# Note: the legacy classes.py additionally needs scikit-learn, python-json-logger,
-# and jupyter_server; those are not required for the sim/ slice or its tests.
+# Note: the legacy classes.py additionally needs python-json-logger and
+# jupyter_server; those are not required for the sim/ slice or its tests.

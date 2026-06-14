@@ -5,8 +5,10 @@ class Property:
     def __init__(self, value):
         self.value = value
 
-    def draw(self, rng):
+    def draw(self, rng, context=None):
         v = self.value
+        if hasattr(v, "draw_with_context"):
+            return v.draw_with_context(rng, context)
         if hasattr(v, "rvs"):
             return v.rvs(random_state=rng)
         if callable(v):
@@ -18,6 +20,8 @@ from dataclasses import dataclass, field
 from datetime import datetime
 
 from scipy.stats import gamma, lognorm, norm, poisson
+
+from sim.pricing import EndogenousPrice
 
 
 def _as_property(v):
@@ -40,7 +44,7 @@ class MarketplaceSpec:
     listing_quality: Property = field(
         default_factory=lambda: Property(lognorm(s=0.6, scale=500)))
     listing_price: Property = field(
-        default_factory=lambda: Property(norm(loc=500, scale=100)))
+        default_factory=lambda: Property(EndogenousPrice()))
 
     def __post_init__(self):
         self.engagement = _as_property(self.engagement)
