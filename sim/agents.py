@@ -7,6 +7,7 @@ class User:
     engagement: float
     response_time: float
     inbox: object = None   # a simpy.Store, assigned at spawn time
+    variant: str = "CONTROL"
 
 
 @dataclass

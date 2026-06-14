@@ -35,7 +35,23 @@ class Market:
         self._next_listing_id = 0
         self._next_proposal_id = 0
 
+    def _assign_variant(self, rng):
+        weights = self.spec.variant_weights
+        names = list(weights.keys())
+        if len(names) == 1:           # no real split -> no rng draw (keeps default runs unchanged)
+            return names[0]
+        w = np.array([weights[n] for n in names], dtype=float)
+        w = w / w.sum()
+        return names[int(rng.choice(len(names), p=w))]
+
     def emit(self, event_type, actor_id=None, entity_id=None, other_id=None, payload=None):
+        if actor_id is not None:
+            actor = self.users_by_id.get(actor_id)
+            if actor is not None:
+                if payload is None:
+                    payload = {"variant": actor.variant}
+                elif "variant" not in payload:
+                    payload = {**payload, "variant": actor.variant}
         self.recorder.record(Event(
             self.clock.to_datetime(self.env.now),
             event_type, actor_id, entity_id, other_id, payload,
@@ -71,6 +87,7 @@ class Market:
         )
         self._next_user_id += 1
         user.inbox = simpy.Store(self.env)
+        user.variant = self._assign_variant(self.rng)
         self.users.append(user)
         self.users_by_id[user.id] = user
         self.emit("register", actor_id=user.id)
