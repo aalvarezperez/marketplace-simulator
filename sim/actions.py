@@ -1,3 +1,4 @@
+import dataclasses
 from dataclasses import dataclass
 from typing import Callable, Tuple
 
@@ -6,15 +7,20 @@ from typing import Callable, Tuple
 class Action:
     """A named step an agent performs in a session.
 
-    `run(agent, market, rng, session)` performs the decision + effect + events for
-    this step. `requires` names prior actions that must have run this session before
-    this one is eligible. `fidelity` is informational for now ("explicit" | "implicit");
-    the emergent decision arrives in a later plan.
+    run(agent, market, rng, session) performs the decision + effect + events.
+    `requires`: prior action names that must have run this session.
+    `fidelity`: "explicit" | "implicit" (informational for now).
+    `before`/`after`: name of a base action this extra hooks around.
+    `mode`: "branch" (insert alongside; coordinate via session state) or
+            "gate" (also add this action to the target's `requires`).
     """
     name: str
     run: Callable
     requires: Tuple[str, ...] = ()
     fidelity: str = "explicit"
+    before: str = None
+    after: str = None
+    mode: str = "branch"
 
 
 def run_session(agent, market, rng, actions):
@@ -84,6 +90,25 @@ def _act_buy(agent, market, rng, session):
                     market.emit("bid", actor_id=agent.id, entity_id=listing.id,
                                 other_id=seller.id,
                                 payload={"proposal_id": proposal.id, "amount": amount})
+
+
+def assemble_actions(base, extras):
+    """Return base + extras, each extra inserted at its before/after hook.
+    A `gate` extra also gets appended to its target action's `requires`."""
+    actions = list(base)
+    for extra in extras:
+        target = extra.before or extra.after
+        idx = next((i for i, a in enumerate(actions) if a.name == target), None)
+        if idx is None:
+            raise ValueError(
+                f"action {extra.name!r} hooks onto unknown action {target!r}")
+        insert_at = idx if extra.before else idx + 1
+        actions.insert(insert_at, extra)
+        if extra.mode == "gate" and extra.before:
+            tgt = actions[insert_at + 1]
+            actions[insert_at + 1] = dataclasses.replace(
+                tgt, requires=tuple(tgt.requires) + (extra.name,))
+    return actions
 
 
 def default_consumer_funnel():
