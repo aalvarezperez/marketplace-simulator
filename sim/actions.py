@@ -70,15 +70,24 @@ def _act_consideration(agent, market, rng, session):
 
 
 def _act_buy(agent, market, rng, session):
+    negotiated = session.get("negotiated", set())
     for listing in session.get("consideration", []):
-        if not listing.is_live:
+        if not listing.is_live or listing.id in negotiated:
             continue
         if _decide(p_buy(agent.engagement), rng):
             market.transact(agent, listing)
-        elif _decide(p_lead(agent.engagement), rng):
+
+
+def _act_negotiate(agent, market, rng, session):
+    negotiated = session.setdefault("negotiated", set())
+    for listing in session.get("consideration", []):
+        if not listing.is_live or listing.id in negotiated:
+            continue
+        if _decide(p_lead(agent.engagement), rng):
             listing.leads += 1
             market.emit("lead", actor_id=agent.id, entity_id=listing.id,
                         other_id=listing.seller_id)
+            negotiated.add(listing.id)            # claim it; buy will skip it
             if _decide(p_bid(agent.engagement), rng):
                 seller = market.get_user(listing.seller_id)
                 if seller is not None and seller.inbox is not None:
@@ -90,6 +99,11 @@ def _act_buy(agent, market, rng, session):
                     market.emit("bid", actor_id=agent.id, entity_id=listing.id,
                                 other_id=seller.id,
                                 payload={"proposal_id": proposal.id, "amount": amount})
+
+
+def negotiate_action():
+    return Action("negotiate", _act_negotiate, requires=("consideration",),
+                  before="buy", mode="branch")
 
 
 def assemble_actions(base, extras):

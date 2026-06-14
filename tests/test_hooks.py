@@ -42,3 +42,18 @@ def test_unknown_hook_target_raises():
 
 def test_base_unchanged_when_no_extras():
     assert [a.name for a in assemble_actions(_base(), [])] == ["a", "b", "c"]
+
+
+def test_negotiate_action_shape():
+    from sim.actions import negotiate_action
+    n = negotiate_action()
+    assert n.name == "negotiate"
+    assert n.before == "buy"
+    assert n.mode == "branch"
+    assert n.requires == ("consideration",)
+
+
+def test_negotiate_inserts_before_buy():
+    from sim.actions import assemble_actions, default_consumer_funnel, negotiate_action
+    names = [a.name for a in assemble_actions(default_consumer_funnel(), [negotiate_action()])]
+    assert names == ["visit", "list", "search", "view", "consideration", "negotiate", "buy"]
