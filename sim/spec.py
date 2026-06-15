@@ -19,7 +19,7 @@ class Property:
 from dataclasses import dataclass, field
 from datetime import datetime
 
-from scipy.stats import gamma, lognorm, poisson
+from scipy.stats import gamma, lognorm, norm, poisson
 
 from sim.pricing import default_pricing
 from sim.willingness import default_willingness
@@ -53,6 +53,8 @@ class MarketplaceSpec:
         default_factory=lambda: Property(lognorm(s=0.3, scale=1.0)))
     willingness: object = default_willingness
     pricing: object = default_pricing
+    seller_patience: Property = None    # days unsold before a markdown; default set in __post_init__
+    markdown_pct: float = 0.1
 
     def __post_init__(self):
         self.engagement = _as_property(self.engagement)
@@ -60,3 +62,7 @@ class MarketplaceSpec:
         self.listings_per_user = _as_property(self.listings_per_user)
         self.listing_quality = _as_property(self.listing_quality)
         self.value_factor = _as_property(self.value_factor)
+        if self.seller_patience is None:
+            self.seller_patience = Property(norm(loc=self.until * 0.2, scale=self.until * 0.1))
+        else:
+            self.seller_patience = _as_property(self.seller_patience)

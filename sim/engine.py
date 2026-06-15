@@ -14,7 +14,7 @@ class Clock:
         return self.start + timedelta(days=float(now))
 
 
-from sim.agents import Listing, Proposal, User, user_lifecycle
+from sim.agents import Listing, Proposal, User, user_lifecycle, MIN_PATIENCE
 from sim.agents import population_arrival, settlement_process, proposal_expiry
 from sim.agents import reactivation, listing_expiry
 from sim.events import Event, EventRecorder
@@ -33,6 +33,7 @@ class Market:
         self.actions = assemble_actions(default_consumer_funnel(), spec.actions)
         self.willingness = spec.willingness
         self.pricing = spec.pricing
+        self.markdown_pct = spec.markdown_pct
         self.users = []
         self.users_by_id = {}
         self.listings = []
@@ -99,6 +100,7 @@ class Market:
         )
         self._next_user_id += 1
         user.value_factor = float(self.spec.value_factor.draw(self.rng))
+        user.patience = max(float(self.spec.seller_patience.draw(self.rng)), MIN_PATIENCE)
         user.inbox = simpy.Store(self.env)
         user.variant = self._assign_variant(self.rng)
         self.users.append(user)

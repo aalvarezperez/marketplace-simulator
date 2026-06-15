@@ -10,6 +10,7 @@ class User:
     variant: str = "CONTROL"
     state: str = "active"      # active | dormant
     value_factor: float = 1.0
+    patience: float = 0.0
 
 
 @dataclass
@@ -42,6 +43,7 @@ from func import sigmoid
 
 ENGAGEMENT_TIME_UNIT = 28.0   # days; sets the engagement -> visit-rate scale
 EPS = 1e-9
+MIN_PATIENCE = 0.25
 VIEW_BASE, VIEW_SLOPE = 0.95, 1.0
 BUY_BASE, BUY_SLOPE = 0.175, 1.0
 LIST_BASE, LIST_SLOPE = 0.1, 1.0
@@ -120,6 +122,18 @@ def listing_expiry(env, listing, market):
     if listing.is_live:
         listing.is_live = False
         market.emit("listing_expired", actor_id=listing.seller_id, entity_id=listing.id)
+
+
+def markdown_listing(env, listing, market, patience):
+    """Seller-driven liquidity correction: while unsold, drop the price by
+    market.markdown_pct every `patience` days. Stops on sale/expiry. The up-move
+    is emergent (cleared cheap stock raises the comparable median)."""
+    while listing.is_live:
+        yield env.timeout(max(patience, MIN_PATIENCE))
+        if listing.is_live:
+            listing.price *= (1.0 - market.markdown_pct)
+            market.emit("markdown", actor_id=listing.seller_id, entity_id=listing.id,
+                        payload={"price": listing.price})
 
 
 def settlement_process(env, user, market, rng):
