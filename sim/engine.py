@@ -31,6 +31,7 @@ class Market:
         self.recorder = recorder
         self.spec = spec
         self.actions = assemble_actions(default_consumer_funnel(), spec.actions)
+        self.willingness = spec.willingness
         self.users = []
         self.users_by_id = {}
         self.listings = []
@@ -70,6 +71,9 @@ class Market:
         return sorted(self.live_listings(),
                       key=lambda l: l.quality, reverse=True)[:k]
 
+    def wtp(self, agent, listing):
+        return self.willingness(agent, listing, self)
+
     def add_listing(self, quality, price, seller_id):
         listing = Listing(id=self._next_listing_id, quality=float(quality),
                           price=float(price), seller_id=seller_id)
@@ -94,6 +98,7 @@ class Market:
             response_time=float(self.spec.response_time.draw(self.rng)),
         )
         self._next_user_id += 1
+        user.value_factor = float(self.spec.value_factor.draw(self.rng))
         user.inbox = simpy.Store(self.env)
         user.variant = self._assign_variant(self.rng)
         self.users.append(user)

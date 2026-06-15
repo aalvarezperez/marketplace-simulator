@@ -9,6 +9,7 @@ class User:
     inbox: object = None   # a simpy.Store, assigned at spawn time
     variant: str = "CONTROL"
     state: str = "active"      # active | dormant
+    value_factor: float = 1.0
 
 
 @dataclass

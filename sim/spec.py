@@ -22,6 +22,7 @@ from datetime import datetime
 from scipy.stats import gamma, lognorm, poisson
 
 from sim.pricing import EndogenousPrice
+from sim.willingness import default_willingness
 
 
 def _as_property(v):
@@ -50,6 +51,9 @@ class MarketplaceSpec:
         default_factory=lambda: Property(lognorm(s=0.6, scale=500)))
     listing_price: Property = field(
         default_factory=lambda: Property(EndogenousPrice()))
+    value_factor: Property = field(
+        default_factory=lambda: Property(lognorm(s=0.3, scale=1.0)))
+    willingness: object = default_willingness
 
     def __post_init__(self):
         self.engagement = _as_property(self.engagement)
@@ -57,3 +61,4 @@ class MarketplaceSpec:
         self.listings_per_user = _as_property(self.listings_per_user)
         self.listing_quality = _as_property(self.listing_quality)
         self.listing_price = _as_property(self.listing_price)
+        self.value_factor = _as_property(self.value_factor)
