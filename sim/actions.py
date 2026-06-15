@@ -69,13 +69,21 @@ def _act_consideration(agent, market, rng, session):
     session["consideration"] = list(session.get("viewed", []))
 
 
-def _act_buy(agent, market, rng, session):
-    negotiated = session.get("negotiated", set())
-    for listing in session.get("consideration", []):
-        if not listing.is_live or listing.id in negotiated:
-            continue
-        if _decide(p_buy(agent.engagement), rng):
-            market.transact(agent, listing)
+def buy_action(fidelity="explicit"):
+    """The buy step. explicit: buy iff willingness >= price (emergent, no rng).
+    implicit: the legacy p_buy(engagement) coin-flip (a cheap stand-in)."""
+    def _run(agent, market, rng, session):
+        negotiated = session.get("negotiated", set())
+        for listing in session.get("consideration", []):
+            if not listing.is_live or listing.id in negotiated:
+                continue
+            if fidelity == "implicit":
+                bought = _decide(p_buy(agent.engagement), rng)
+            else:
+                bought = market.wtp(agent, listing) >= listing.price
+            if bought:
+                market.transact(agent, listing)
+    return Action("buy", _run, requires=("consideration",), fidelity=fidelity)
 
 
 def _act_negotiate(agent, market, rng, session):
@@ -132,5 +140,5 @@ def default_consumer_funnel():
         Action("search", _act_search, requires=("visit",)),
         Action("view", _act_view, requires=("search",)),
         Action("consideration", _act_consideration, requires=("view",)),
-        Action("buy", _act_buy, requires=("consideration",)),
+        buy_action("explicit"),
     ]
