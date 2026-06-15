@@ -162,3 +162,31 @@ One declarative spec, kept crisp and extensible where it matters:
 - Two sub-markets: an agent only ever views/buys listings in its own sub-market (matching isolation).
 - Fidelity: a step run `implicit` (rate) vs `explicit` (willingness) both produce a coherent funnel;
   flipping fidelity changes cost, not the pipeline's validity.
+
+---
+
+## 10. Deferred — fix price-inflation via supply-side market-following pricing
+
+**Observed (after Plan 3):** with the emergent willingness buy, the default marketplace makes
+~0 direct purchases. Diagnostic on a default run: `price/quality` ratio ≈ **2.0** (median), while
+WTP ≈ `quality × value_factor` with `value_factor` ≈ 1 — so almost no ask clears, and demand
+collapses.
+
+**Root cause (not the willingness model — that's correct and tested):** the Epic B
+`EndogenousPrice` model has sellers price off *other listings' asks* (regression of price~quality on
+the top-k-by-quality listings). That's a **positive feedback with no demand anchor** — high asks pull
+the regression up, new listings price higher, which become the new top, and prices drift to ~2×
+intrinsic value (`v = quality`). Sticky WTP can't follow → conversion dies. It's the price-surge
+dynamic, but *runaway*.
+
+**Fix (deferred to the supply-side work — do NOT patch with a hardcoded anchor):** sellers should set
+price **following the market outcome**, not merely quality/other-asks — i.e. respond to realized
+**demand** (what actually sells, unsold-inventory pressure, competition), which introduces a
+**negative feedback**: listings that don't move get repriced *down* toward what buyers will pay. This
+tethers price to WTP endogenously, restores two-sided elasticity, and keeps transient price-out
+without permanent inflation. No artificial value-anchor needed.
+
+**Action item:** add a supply-side pricing plan (a future "Plan 6 — market-following seller pricing")
+that replaces/extends `EndogenousPrice` with a demand-aware repricing strategy. Until then, the
+direct-buy path will under-convert by default; the negotiation path still clears (settlement accepts
+bids independent of WTP). Calibrate/verify direct-buy conversion once this lands.
