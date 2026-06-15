@@ -165,7 +165,18 @@ One declarative spec, kept crisp and extensible where it matters:
 
 ---
 
-## 10. Deferred — fix price-inflation via supply-side market-following pricing
+## 10. Price-inflation — RESOLVED by Plan 4 (median-of-comparable pricing)
+
+> **Update (Plan 4, 2026-06-15):** RESOLVED. `EndogenousPrice` (regression on top-k-by-quality →
+> extrapolation/outlier inflation to ~2× value) was deleted and replaced with a decoupled `pricing`
+> callable; the default `default_pricing` lists at the **median ask of the K nearest-quality live
+> listings** (cold-start → quality-anchored prior). Sellers price off observable asks (realistic),
+> but the local median is a stable fixed point with no extrapolation. Verified: price/quality median
+> ≈ 0.82 (was ~2.0), direct-buy conversion restored (was ~0). The **liquidity / time-to-sold**
+> correction (stale → markdown, fast → raise) and a **platform-recommended-price** strategy remain
+> future plans — the callable already accommodates both. Original analysis kept below for history.
+
+
 
 **Observed (after Plan 3):** with the emergent willingness buy, the default marketplace makes
 ~0 direct purchases. Diagnostic on a default run: `price/quality` ratio ≈ **2.0** (median), while
