@@ -32,6 +32,7 @@ class Market:
         self.spec = spec
         self.actions = assemble_actions(default_consumer_funnel(), spec.actions)
         self.willingness = spec.willingness
+        self.pricing = spec.pricing
         self.users = []
         self.users_by_id = {}
         self.listings = []
@@ -85,8 +86,7 @@ class Market:
 
     def create_listing_for(self, user, rng):
         quality = self.spec.listing_quality.draw(rng)
-        price = self.spec.listing_price.draw(
-            rng, context={"market": self, "quality": quality, "seller": user})
+        price = self.pricing(user, quality, self, rng)
         listing = self.add_listing(quality=quality, price=price, seller_id=user.id)
         self.emit("list", actor_id=user.id, entity_id=listing.id)
         return listing
@@ -192,8 +192,7 @@ class Marketplace:
             user = market.spawn_user()
             for _ in range(int(spec.listings_per_user.draw(rng))):
                 quality = spec.listing_quality.draw(rng)
-                price = spec.listing_price.draw(
-                    rng, context={"market": market, "quality": quality})
+                price = market.pricing(user, quality, market, rng)
                 market.add_listing(quality=quality, price=price, seller_id=user.id)
         env.process(population_arrival(env, market, rng))
         return cls(market)
