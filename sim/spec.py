@@ -31,6 +31,30 @@ def _as_property(v):
 
 @dataclass
 class MarketplaceSpec:
+    """Declarative marketplace definition. Pass to ``Marketplace.from_spec``.
+
+    Run controls:
+      start                  - calendar start (datetime, required)
+      seed                   - RNG seed (deterministic runs)
+      n_seed_users, until    - seed population; sim-days to run
+      arrival_rate           - new users per day
+
+    Agent dispositions (Property: literal | scipy dist | callable | context-model):
+      engagement, response_time, value_factor, seller_patience
+
+    Funnel / lifecycle:
+      proposal_expiry_days, reactivation_scale_days, listing_ttl_days
+      variant_weights        - A/B split, e.g. {"CONTROL": .5, "B": .5}
+
+    Seller pricing / behavior:
+      pricing                - pricing(seller, quality, market, rng) -> price
+      willingness            - willingness(agent, listing, market) -> WTP
+      markdown_pct           - stale-listing markdown step (0 disables)
+
+    Composition:
+      actions                - extra Action()s to register, e.g. [negotiate_action()]
+      listings_per_user, listing_quality
+    """
     start: datetime
     seed: int = 0
     n_seed_users: int = 1000

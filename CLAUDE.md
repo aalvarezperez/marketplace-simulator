@@ -141,8 +141,7 @@ Run it (from the repo root, using `python` = the conda base interpreter that has
 
 ```python
 from datetime import datetime
-from sim.engine import Marketplace
-from sim.spec import MarketplaceSpec
+from sim import Marketplace, MarketplaceSpec
 
 mkt = Marketplace.from_spec(MarketplaceSpec(start=datetime(2026, 1, 1),
                                             n_seed_users=1000, until=7.0, seed=42))

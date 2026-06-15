@@ -210,3 +210,12 @@ class Marketplace:
     @property
     def events(self):
         return self.market.recorder.events
+
+    def write_jsonl(self, path):
+        """Dump the event stream to JSON lines."""
+        self.market.recorder.write_jsonl(path)
+
+    def summary(self):
+        """Event-type counts for the run, e.g. {'visit': 1816, 'view': 2351, ...}."""
+        from collections import Counter
+        return dict(Counter(e.event_type for e in self.events))
