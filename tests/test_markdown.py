@@ -49,3 +49,26 @@ def test_sold_listing_stops_marking_down():
     listing.is_live = False
     env.run(until=10.0)
     assert listing.price == p_after_one
+
+
+def test_markdown_events_occur_in_full_run():
+    from sim.engine import Marketplace
+    spec = MarketplaceSpec(start=datetime(2026, 1, 1), n_seed_users=200, until=8.0, seed=1)
+    events = Marketplace.from_spec(spec).run()
+    assert any(e.event_type == "markdown" for e in events)
+
+
+def test_markdown_disabled_when_pct_zero():
+    from sim.engine import Marketplace
+    spec = MarketplaceSpec(start=datetime(2026, 1, 1), n_seed_users=100, until=6.0, seed=1,
+                           markdown_pct=0.0)
+    events = Marketplace.from_spec(spec).run()
+    assert not any(e.event_type == "markdown" for e in events)
+
+
+def test_markdown_run_is_reproducible():
+    from sim.engine import Marketplace
+    def run():
+        spec = MarketplaceSpec(start=datetime(2026, 1, 1), n_seed_users=120, until=6.0, seed=4)
+        return [(e.event_type, e.actor_id, e.entity_id) for e in Marketplace.from_spec(spec).run()]
+    assert run() == run()
