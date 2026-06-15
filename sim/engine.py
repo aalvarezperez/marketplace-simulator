@@ -83,6 +83,10 @@ class Market:
         self.listings.append(listing)
         if self.spec.listing_ttl_days is not None:
             self.env.process(listing_expiry(self.env, listing, self))
+        if self.markdown_pct > 0:
+            seller = self.get_user(seller_id)
+            if seller is not None:
+                self.env.process(markdown_listing(self.env, listing, self, seller.patience))
         return listing
 
     def create_listing_for(self, user, rng):
@@ -90,8 +94,6 @@ class Market:
         price = self.pricing(user, quality, self, rng)
         listing = self.add_listing(quality=quality, price=price, seller_id=user.id)
         self.emit("list", actor_id=user.id, entity_id=listing.id)
-        if self.markdown_pct > 0:
-            self.env.process(markdown_listing(self.env, listing, self, user.patience))
         return listing
 
     def spawn_user(self):

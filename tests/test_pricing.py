@@ -38,6 +38,7 @@ def test_default_marketplace_now_converts():
 def test_custom_pricing_callable_is_used():
     mkt = Marketplace.from_spec(MarketplaceSpec(
         start=datetime(2026, 1, 1), n_seed_users=20, until=2.0, seed=1,
+        markdown_pct=0.0,                       # isolate the pricing callable from markdown
         pricing=lambda seller, quality, market, rng: 7.0))
     mkt.run()
     assert all(l.price == 7.0 for l in mkt.market.listings)
