@@ -270,3 +270,29 @@ def test_public_exports_are_importable():
     for name in ("Experiment", "SimpleRandomization", "ClusterRandomization",
                  "Switchback", "AssignmentStore", "Assignment", "bucket"):
         assert name in sim.__all__
+
+
+import pytest
+
+
+def test_bucket_rejects_bad_variants():
+    with pytest.raises(ValueError):
+        bucket("k", {}, salt="e")                       # empty
+    with pytest.raises(ValueError):
+        bucket("k", {"A": 0.0, "B": 0.0}, salt="e")     # sum to zero
+    with pytest.raises(ValueError):
+        bucket("k", {"A": -1.0, "B": 2.0}, salt="e")    # negative weight
+
+
+def test_switchback_rejects_nonpositive_period():
+    with pytest.raises(ValueError):
+        Switchback(period=0)
+    with pytest.raises(ValueError):
+        Switchback(period=-1.0)
+
+
+def test_store_rejects_duplicate_experiment_keys():
+    dup1 = Experiment(key="x", variants={"A": 1.0})
+    dup2 = Experiment(key="x", variants={"CONTROL": 0.5, "B": 0.5})
+    with pytest.raises(ValueError):
+        AssignmentStore([dup1, dup2], _FakeMarket())

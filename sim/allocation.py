@@ -22,10 +22,15 @@ def bucket(key, variants, salt):
     processes (this is why we use md5, not Python's process-salted ``hash()``).
     ``variants`` is {name: weight}; weights need not sum to 1 (they are normalized).
     """
+    if not variants:
+        raise ValueError("variants must be a non-empty {name: weight} mapping")
+    names = list(variants)
+    weights = np.array([variants[n] for n in names], dtype=float)
+    if (weights < 0).any() or weights.sum() <= 0:
+        raise ValueError("variant weights must be non-negative and sum to a positive value")
     h = hashlib.md5(f"{salt}:{key}".encode()).hexdigest()
     x = int(h[:8], 16) / 0xFFFFFFFF                 # deterministic uniform in [0, 1]
-    names = list(variants)
-    cum = np.cumsum(np.array([variants[n] for n in names], dtype=float))
+    cum = np.cumsum(weights)
     cum /= cum[-1]
     return names[min(int(np.searchsorted(cum, x)), len(names) - 1)]
 
@@ -54,6 +59,8 @@ class Switchback:
     """The market (or each cluster) flips variant every ``period`` sim-days."""
 
     def __init__(self, period=1.0, per_cluster=False):
+        if period <= 0:
+            raise ValueError("Switchback period must be > 0")
         self.period = period
         self.per_cluster = per_cluster
 
@@ -119,6 +126,10 @@ class AssignmentStore:
     """
 
     def __init__(self, experiments, market):
+        keys = [e.key for e in experiments]
+        dupes = sorted({k for k in keys if keys.count(k) > 1})
+        if dupes:
+            raise ValueError(f"duplicate experiment keys: {dupes}")
         self._exp = {e.key: e for e in experiments}
         self._market = market
         self._cache = {}     # (exp_key, subject_id, window) -> Assignment   <- O(1) lookup
