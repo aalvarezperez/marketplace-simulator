@@ -31,6 +31,7 @@ from scipy.stats import gamma, lognorm, norm, poisson
 
 from sim.pricing import default_pricing
 from sim.willingness import default_willingness
+from sim.allocation import Experiment, SimpleRandomization
 
 
 def _as_property(v):
@@ -88,6 +89,8 @@ class MarketplaceSpec:
     pricing: object = default_pricing
     seller_patience: Property = None    # days unsold before a markdown; default set in __post_init__
     markdown_pct: float = 0.1
+    experiments: list = field(default_factory=list)     # allocation Experiment registry
+    cluster: Property = field(default_factory=lambda: Property(0))   # generic cluster key per agent
 
     def __post_init__(self):
         """Wrap the disposition fields in ``Property`` so users can pass a bare
@@ -104,3 +107,11 @@ class MarketplaceSpec:
             self.seller_patience = Property(norm(loc=self.until * 0.2, scale=self.until * 0.1))
         else:
             self.seller_patience = _as_property(self.seller_patience)
+        self.cluster = _as_property(self.cluster)
+        # Back-compat: a real variant_weights split with no explicit experiments
+        # synthesizes one simple-randomization experiment named "default".
+        # When experiments are given explicitly, variant_weights is ignored.
+        if not self.experiments and len(self.variant_weights) > 1:
+            self.experiments = [Experiment(key="default",
+                                           variants=dict(self.variant_weights),
+                                           strategy=SimpleRandomization())]

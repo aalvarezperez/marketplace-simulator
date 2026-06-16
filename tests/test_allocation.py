@@ -185,3 +185,37 @@ def test_current_returns_latest():
     store.resolve("sb", s, time=1.3)
     cur = store.current("sb", subject_id=1)
     assert isinstance(cur, Assignment) and cur.window == 1
+
+
+from datetime import datetime
+
+from sim.spec import MarketplaceSpec, Property
+
+
+def test_spec_no_split_has_no_experiments():
+    spec = MarketplaceSpec(start=datetime(2026, 1, 1))
+    assert spec.experiments == []
+
+
+def test_variant_weights_synthesizes_default_experiment():
+    spec = MarketplaceSpec(start=datetime(2026, 1, 1),
+                           variant_weights={"CONTROL": 0.5, "B": 0.5})
+    assert len(spec.experiments) == 1
+    e = spec.experiments[0]
+    assert e.key == "default"
+    assert e.variants == {"CONTROL": 0.5, "B": 0.5}
+    assert isinstance(e.strategy, SimpleRandomization)
+
+
+def test_explicit_experiments_win_over_variant_weights():
+    custom = Experiment(key="mine", variants={"CONTROL": 0.5, "B": 0.5})
+    spec = MarketplaceSpec(start=datetime(2026, 1, 1),
+                           variant_weights={"CONTROL": 0.5, "B": 0.5},
+                           experiments=[custom])
+    assert [e.key for e in spec.experiments] == ["mine"]   # variant_weights ignored
+
+
+def test_cluster_is_coerced_to_property():
+    spec = MarketplaceSpec(start=datetime(2026, 1, 1))
+    assert isinstance(spec.cluster, Property)
+    assert spec.cluster.draw(rng=None) == 0                # literal 0; rng untouched
