@@ -219,3 +219,45 @@ def test_cluster_is_coerced_to_property():
     spec = MarketplaceSpec(start=datetime(2026, 1, 1))
     assert isinstance(spec.cluster, Property)
     assert spec.cluster.draw(rng=None) == 0                # literal 0; rng untouched
+
+
+from sim.allocation import Experiment as _Exp
+from sim.engine import Marketplace
+
+
+def test_market_variant_lookup_and_ledger_end_to_end():
+    # A variant-aware willingness callable makes 'B' value items more, so the
+    # buy step reads market.variant(...) -> allocation gets resolved + logged.
+    def uplift(agent, listing, market):
+        base = listing.quality * agent.value_factor
+        return base * 1.2 if market.variant(agent, "wtp") == "B" else base
+
+    def build():
+        spec = MarketplaceSpec(
+            start=datetime(2026, 1, 1), n_seed_users=300, until=5.0, seed=11,
+            willingness=uplift,
+            experiments=[_Exp(key="wtp", variants={"CONTROL": 0.5, "B": 0.5})])
+        return Marketplace.from_spec(spec)
+
+    mkt = build()
+    events = mkt.run()
+    assignment_events = [e for e in events if e.event_type == "assignment"]
+    assert assignment_events                               # allocation produced data
+    ledger = mkt.market.assignment_store.ledger()
+    variants = {a.variant for a in ledger}
+    assert variants == {"CONTROL", "B"}                    # both buckets allocated
+
+    # Determinism: same spec + seed -> byte-identical stream.
+    a = [(e.event_type, e.actor_id, e.entity_id) for e in build().run()]
+    b = [(e.event_type, e.actor_id, e.entity_id) for e in build().run()]
+    assert a == b
+
+
+def test_no_experiments_means_no_assignment_events():
+    spec = MarketplaceSpec(start=datetime(2026, 1, 1), n_seed_users=50, until=3.0, seed=1)
+    mkt = Marketplace.from_spec(spec)
+    events = mkt.run()
+    assert not [e for e in events if e.event_type == "assignment"]
+    # Lookup on an unconfigured experiment returns the caller's default.
+    user = mkt.market.users[0]
+    assert mkt.market.variant(user, "anything", default=None) is None

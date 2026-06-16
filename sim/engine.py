@@ -20,6 +20,7 @@ from sim.agents import population_arrival, settlement_process, proposal_expiry
 from sim.agents import reactivation, listing_expiry, markdown_listing
 from sim.events import Event, EventRecorder
 from sim.actions import assemble_actions, default_consumer_funnel, run_session as _run_session_actions
+from sim.allocation import AssignmentStore
 
 
 class Market:
@@ -35,6 +36,8 @@ class Market:
         self.willingness = spec.willingness
         self.pricing = spec.pricing
         self.markdown_pct = spec.markdown_pct
+        self.experiments = spec.experiments
+        self.assignment_store = AssignmentStore(spec.experiments, self)
         self.users = []
         self.users_by_id = {}
         self.listings = []
@@ -42,33 +45,21 @@ class Market:
         self._next_listing_id = 0
         self._next_proposal_id = 0
 
-    def _assign_variant(self, rng):
-        """Draw an A/B variant from ``spec.variant_weights`` (normalized). With a
-        single variant it short-circuits without touching ``rng`` — so adding a
-        default (one-variant) split can't shift the random stream of existing runs."""
-        weights = self.spec.variant_weights
-        names = list(weights.keys())
-        if len(names) == 1:           # no real split -> no rng draw (keeps default runs unchanged)
-            return names[0]
-        w = np.array([weights[n] for n in names], dtype=float)
-        w = w / w.sum()
-        return names[int(rng.choice(len(names), p=w))]
-
     def run_session(self, user, rng):
         """Run the assembled action funnel once for ``user`` (called by the lifecycle)."""
         return _run_session_actions(user, self, rng, self.actions)
 
+    def variant(self, subject, exp_key, default=None):
+        """Look up ``subject``'s variant for experiment ``exp_key`` at the current
+        sim-time. Resolves + caches + logs on first read (per switchback window);
+        O(1) thereafter. Returns ``default`` when the experiment is unknown,
+        inactive, or the subject is ineligible. This is the whole allocation surface."""
+        return self.assignment_store.resolve(exp_key, subject, self.env.now, default)
+
     def emit(self, event_type, actor_id=None, entity_id=None, other_id=None, payload=None):
-        """Record an ``Event`` stamped with the current calendar time. If there's an
-        actor, its A/B ``variant`` is merged into the payload (without clobbering an
-        explicit one), so every actor-attributed event is analyzable by variant."""
-        if actor_id is not None:
-            actor = self.users_by_id.get(actor_id)
-            if actor is not None:
-                if payload is None:
-                    payload = {"variant": actor.variant}
-                elif "variant" not in payload:
-                    payload = {**payload, "variant": actor.variant}
+        """Record an ``Event`` stamped with the current calendar time. Behavioral
+        events are lean; the ``assignment`` event (a projection of the
+        AssignmentStore) is the only variant-bearing log."""
         self.recorder.record(Event(
             self.clock.to_datetime(self.env.now),
             event_type, actor_id, entity_id, other_id, payload,
@@ -116,7 +107,7 @@ class Market:
 
     def spawn_user(self):
         """Mint a user: draw its dispositions (engagement, response_time, value_factor,
-        patience), give it an inbox + A/B variant, register it, and kick off its two
+        patience), give it an inbox + cluster key, register it, and kick off its two
         long-lived processes — the session lifecycle and the inbox settlement loop.
         Used both for the t0 seed population and for mid-run arrivals."""
         user = User(
@@ -128,7 +119,7 @@ class Market:
         user.value_factor = float(self.spec.value_factor.draw(self.rng))
         user.patience = max(float(self.spec.seller_patience.draw(self.rng)), MIN_PATIENCE)
         user.inbox = simpy.Store(self.env)
-        user.variant = self._assign_variant(self.rng)
+        user.cluster = self.spec.cluster.draw(self.rng)
         self.users.append(user)
         self.users_by_id[user.id] = user
         self.emit("register", actor_id=user.id)

@@ -10,13 +10,14 @@ class User:
     before this user reacts to its inbox; ``value_factor`` scales willingness-to-pay;
     ``patience`` is the days-unsold a listing waits before this seller marks it down.
     ``inbox`` is a ``simpy.Store`` (assigned at spawn). ``state`` toggles
-    active/dormant across churn and reactivation. ``variant`` is the A/B tag.
+    active/dormant across churn and reactivation. ``cluster`` is the unit's cluster
+    key (drawn at spawn), used by cluster/switchback allocation designs.
     """
     id: int
     engagement: float
     response_time: float
     inbox: object = None   # a simpy.Store, assigned at spawn time
-    variant: str = "CONTROL"
+    cluster: object = 0    # cluster key for allocation; drawn at spawn from spec.cluster
     state: str = "active"      # active | dormant
     value_factor: float = 1.0
     patience: float = 0.0
