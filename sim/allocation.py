@@ -97,3 +97,74 @@ class Experiment:
             self.subject_key = lambda s: s.id
         if self.cluster_key is None:
             self.cluster_key = lambda s: getattr(s, "cluster", 0)
+
+
+@dataclass(frozen=True)
+class Assignment:
+    """The truth row written the moment a subject is allocated."""
+    experiment: str
+    subject_id: object        # the hashed unit's id
+    variant: str
+    cluster: object
+    window: object            # None for time-invariant designs; window index for switchback
+    assigned_at: float        # sim-time of first resolution
+    valid_from: float         # when this assignment takes effect (None = open)
+    valid_to: float           # when it stops (None = open-ended)
+
+
+class AssignmentStore:
+    """Authoritative cache + append-only ledger. Written once per allocation,
+    queried cheaply thereafter. The event stream is a projection of this, not the
+    truth.
+    """
+
+    def __init__(self, experiments, market):
+        self._exp = {e.key: e for e in experiments}
+        self._market = market
+        self._cache = {}     # (exp_key, subject_id, window) -> Assignment   <- O(1) lookup
+        self._ledger = []    # append-only list[Assignment]                  <- the persistent truth
+
+    def resolve(self, exp_key, subject, time, default=None):
+        exp = self._exp.get(exp_key)
+        if exp is None:
+            return default
+        window = exp.strategy.window(time)
+        ckey = (exp_key, subject.id, window)
+        hit = self._cache.get(ckey)
+        if hit is not None:                                  # already allocated -> read truth
+            return hit.variant
+        if not (exp.start <= time and (exp.end is None or time < exp.end)):
+            return default                                   # outside active window
+        if exp.eligibility is not None and not exp.eligibility(subject, self._market):
+            return default                                   # ineligible
+        variant = exp.strategy.assign(
+            exp.subject_key(subject), exp.cluster_key(subject), window, exp.variants, exp.salt)
+        vfrom, vto = self._valid_bounds(exp, window)
+        a = Assignment(exp_key, subject.id, variant, exp.cluster_key(subject),
+                       window, time, vfrom, vto)
+        self._cache[ckey] = a
+        self._ledger.append(a)                               # write truth once
+        self._market.emit("assignment", actor_id=subject.id, payload={
+            "experiment": a.experiment, "variant": a.variant, "cluster": a.cluster,
+            "window": a.window, "valid_from": a.valid_from, "valid_to": a.valid_to,
+        })                                                   # log = projection of the truth
+        return variant
+
+    def _valid_bounds(self, exp, window):
+        if window is None:
+            return (exp.start, exp.end)
+        wb = getattr(exp.strategy, "window_bounds", lambda w: (None, None))
+        wfrom, wto = wb(window)
+        lo = exp.start if wfrom is None else max(exp.start, wfrom)
+        hi = wto if exp.end is None else (exp.end if wto is None else min(exp.end, wto))
+        return (lo, hi)
+
+    def current(self, exp_key, subject_id):
+        """Most recent Assignment for a subject in an experiment, or None."""
+        hits = [a for (e, s, _w), a in self._cache.items()
+                if e == exp_key and s == subject_id]
+        return max(hits, key=lambda a: a.assigned_at) if hits else None
+
+    def ledger(self):
+        """The full append-only assignment record (for export to a dataframe)."""
+        return list(self._ledger)
