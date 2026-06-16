@@ -39,7 +39,7 @@ class Proposal:
 
 import math
 
-from func import sigmoid
+from sim.func import sigmoid
 
 ENGAGEMENT_TIME_UNIT = 28.0   # days; sets the engagement -> visit-rate scale
 EPS = 1e-9
