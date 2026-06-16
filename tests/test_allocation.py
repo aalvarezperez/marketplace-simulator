@@ -261,3 +261,12 @@ def test_no_experiments_means_no_assignment_events():
     # Lookup on an unconfigured experiment returns the caller's default.
     user = mkt.market.users[0]
     assert mkt.market.variant(user, "anything", default=None) is None
+
+
+def test_public_exports_are_importable():
+    import sim
+    from sim import (Experiment, SimpleRandomization, ClusterRandomization,
+                     Switchback, AssignmentStore, Assignment, bucket)
+    for name in ("Experiment", "SimpleRandomization", "ClusterRandomization",
+                 "Switchback", "AssignmentStore", "Assignment", "bucket"):
+        assert name in sim.__all__

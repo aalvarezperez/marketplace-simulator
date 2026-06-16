@@ -8,6 +8,8 @@
     mkt.write_jsonl("events.jsonl")
 """
 from sim.actions import negotiate_action
+from sim.allocation import (Assignment, AssignmentStore, ClusterRandomization,
+                            Experiment, SimpleRandomization, Switchback, bucket)
 from sim.engine import Marketplace
 from sim.pricing import default_pricing
 from sim.spec import MarketplaceSpec, Property
@@ -16,4 +18,6 @@ from sim.willingness import default_willingness
 __all__ = [
     "Marketplace", "MarketplaceSpec", "Property",
     "negotiate_action", "default_pricing", "default_willingness",
+    "Experiment", "SimpleRandomization", "ClusterRandomization", "Switchback",
+    "AssignmentStore", "Assignment", "bucket",
 ]
