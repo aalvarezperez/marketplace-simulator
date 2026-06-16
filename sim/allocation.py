@@ -27,3 +27,41 @@ def bucket(key, variants, salt):
     cum = np.cumsum(np.array([variants[n] for n in names], dtype=float))
     cum /= cum[-1]
     return names[min(int(np.searchsorted(cum, x)), len(names) - 1)]
+
+
+class SimpleRandomization:
+    """Per-unit Bernoulli assignment. Time-invariant, sticky to the unit."""
+
+    def window(self, t):
+        return None
+
+    def assign(self, unit_key, cluster_key, window, variants, salt):
+        return bucket(str(unit_key), variants, salt)
+
+
+class ClusterRandomization:
+    """Every unit in a cluster shares the cluster's variant. Time-invariant."""
+
+    def window(self, t):
+        return None
+
+    def assign(self, unit_key, cluster_key, window, variants, salt):
+        return bucket(str(cluster_key), variants, salt)
+
+
+class Switchback:
+    """The market (or each cluster) flips variant every ``period`` sim-days."""
+
+    def __init__(self, period=1.0, per_cluster=False):
+        self.period = period
+        self.per_cluster = per_cluster
+
+    def window(self, t):
+        return int(t // self.period)
+
+    def assign(self, unit_key, cluster_key, window, variants, salt):
+        key = f"{cluster_key}:{window}" if self.per_cluster else str(window)
+        return bucket(key, variants, salt)
+
+    def window_bounds(self, window):
+        return (window * self.period, (window + 1) * self.period)
