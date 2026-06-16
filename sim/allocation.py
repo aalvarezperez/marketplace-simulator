@@ -10,6 +10,7 @@ Self-contained: imports only stdlib + numpy, so sim.spec / sim.engine import it
 without cycles.
 """
 import hashlib
+from dataclasses import dataclass
 
 import numpy as np
 
@@ -65,3 +66,34 @@ class Switchback:
 
     def window_bounds(self, window):
         return (window * self.period, (window + 1) * self.period)
+
+
+@dataclass
+class Experiment:
+    """Declarative description of one experiment's allocation.
+
+    Names in ``variants`` are entirely user-defined; nothing is privileged. There
+    is no ``unit`` enum and no baked-in baseline name: granularity is set by the
+    ``subject_key`` / ``cluster_key`` extractors plus what the caller passes to
+    ``AssignmentStore.resolve``. When the experiment is inactive / ineligible /
+    absent, resolution returns the caller's ``default`` (see AssignmentStore).
+    """
+    key: str
+    variants: dict                       # {'CONTROL': .5, 'B': .5}
+    strategy: object = None              # an AllocationStrategy; default SimpleRandomization()
+    salt: str = None                     # default = key (each experiment hashes independently)
+    start: float = 0.0                   # active window, sim-days (inclusive)
+    end: float = None                    # active window end, sim-days (exclusive); None = no end
+    eligibility: object = None           # predicate(subject, market) -> bool; default everyone
+    subject_key: object = None           # subject -> hashing key; default lambda s: s.id
+    cluster_key: object = None           # subject -> cluster key; default lambda s: getattr(s,'cluster',0)
+
+    def __post_init__(self):
+        if self.strategy is None:
+            self.strategy = SimpleRandomization()
+        if self.salt is None:
+            self.salt = self.key
+        if self.subject_key is None:
+            self.subject_key = lambda s: s.id
+        if self.cluster_key is None:
+            self.cluster_key = lambda s: getattr(s, "cluster", 0)

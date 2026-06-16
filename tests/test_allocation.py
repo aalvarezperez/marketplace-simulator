@@ -66,3 +66,33 @@ def test_switchback_per_cluster_differs():
     distinct = {s.assign("u", cluster_key=c, window=0, variants=VARS, salt="e")
                 for c in range(20)}
     assert distinct == {"CONTROL", "B"}  # both variants appear across clusters
+
+
+from sim.allocation import Experiment
+
+
+class _Subj:
+    def __init__(self, id, cluster=0):
+        self.id = id
+        self.cluster = cluster
+
+
+def test_experiment_defaults():
+    e = Experiment(key="wtp", variants={"CONTROL": 0.5, "B": 0.5})
+    assert isinstance(e.strategy, SimpleRandomization)
+    assert e.salt == "wtp"               # defaults to the key
+    assert e.start == 0.0 and e.end is None
+    assert e.eligibility is None
+    s = _Subj(id=42, cluster=7)
+    assert e.subject_key(s) == 42        # default extractor = .id
+    assert e.cluster_key(s) == 7         # default extractor = .cluster
+
+
+def test_experiment_custom_extractors_and_salt():
+    e = Experiment(key="k", variants={"A": 1.0}, salt="custom",
+                   subject_key=lambda s: f"u{s.id}",
+                   cluster_key=lambda s: "fixed")
+    s = _Subj(id=5)
+    assert e.salt == "custom"
+    assert e.subject_key(s) == "u5"
+    assert e.cluster_key(s) == "fixed"
