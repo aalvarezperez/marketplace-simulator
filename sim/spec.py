@@ -6,6 +6,14 @@ class Property:
         self.value = value
 
     def draw(self, rng, context=None):
+        """Sample one value from the wrapped generator using ``rng``.
+
+        Dispatch by capability, most specific first: a context-model (has
+        ``draw_with_context``) lets the value depend on live state; a scipy frozen
+        dist (has ``rvs``) is sampled with ``rng`` as its ``random_state``; a plain
+        callable is called as ``v(rng)``; anything else is a literal returned as-is.
+        Always drawing from the passed ``rng`` is what keeps runs deterministic.
+        """
         v = self.value
         if hasattr(v, "draw_with_context"):
             return v.draw_with_context(rng, context)
@@ -26,6 +34,7 @@ from sim.willingness import default_willingness
 
 
 def _as_property(v):
+    """Coerce a raw spec value into a ``Property`` (idempotent for one already)."""
     return v if isinstance(v, Property) else Property(v)
 
 
@@ -81,6 +90,11 @@ class MarketplaceSpec:
     markdown_pct: float = 0.1
 
     def __post_init__(self):
+        """Wrap the disposition fields in ``Property`` so users can pass a bare
+        literal / scipy dist / callable. ``seller_patience`` has no fixed default:
+        it is anchored to the run length (mean = 20% of ``until``) so markdowns
+        actually fire within a run, then coerced like the rest.
+        """
         self.engagement = _as_property(self.engagement)
         self.response_time = _as_property(self.response_time)
         self.listings_per_user = _as_property(self.listings_per_user)

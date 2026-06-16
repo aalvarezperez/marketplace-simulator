@@ -3,6 +3,15 @@ from dataclasses import dataclass
 
 @dataclass
 class User:
+    """A marketplace participant — generic, so the same object is buyer and seller.
+
+    Heterogeneity lives in the per-agent draws: ``engagement`` drives every implicit
+    funnel rate and the wake-up cadence; ``response_time`` is the latency (days)
+    before this user reacts to its inbox; ``value_factor`` scales willingness-to-pay;
+    ``patience`` is the days-unsold a listing waits before this seller marks it down.
+    ``inbox`` is a ``simpy.Store`` (assigned at spawn). ``state`` toggles
+    active/dormant across churn and reactivation. ``variant`` is the A/B tag.
+    """
     id: int
     engagement: float
     response_time: float
@@ -15,6 +24,12 @@ class User:
 
 @dataclass
 class Listing:
+    """An item for sale. ``quality`` is its intrinsic monetary value — the shared
+    anchor both pricing and willingness-to-pay are denominated in. ``price`` is the
+    current ask (mutated down by markdowns). ``is_live`` flips false when stock hits
+    zero or the TTL expires, which removes it from the comparable/match set. The
+    ``views/leads/bids/transactions`` counters accumulate funnel activity per listing.
+    """
     id: int
     quality: float
     price: float
@@ -29,6 +44,13 @@ class Listing:
 
 @dataclass
 class Proposal:
+    """A bid in flight between a buyer and a seller (the negotiation add-on).
+
+    ``amount`` is the offered price (below the ask). ``status`` walks a pipeline:
+    ``created -> with_seller`` (in seller inbox) ``-> accepted -> with_buyer`` (routed
+    back) ``-> paid``. Terminal off-ramps: ``rejected``/``lost`` (listing died before
+    each side acted) and ``expired`` (neither side acted within the expiry window).
+    """
     id: int
     buyer: object
     seller: object
@@ -54,37 +76,54 @@ SESSION_K = 10                # listings shown per session
 CHURN_BASE, CHURN_SLOPE = 0.1, 1.0
 
 
+# --- Implicit-fidelity rates -------------------------------------------------
+# Each is the engagement-driven probability of a funnel step we chose NOT to model
+# explicitly: sigmoid(log(base) + slope * log(engagement)). These are stand-ins, not
+# configured truths — model a step explicitly (e.g. buy via willingness >= price)
+# when your experiment perturbs it, and leave the rest as these cheap coin-flips.
+
 def p_view(engagement):
+    """P(view a shown listing) — rises with engagement."""
     e = max(engagement, EPS)
     return float(sigmoid(math.log(VIEW_BASE) + VIEW_SLOPE * math.log(e)))
 
 
 def p_buy(engagement):
+    """P(direct buy) — the implicit alternative to explicit willingness-vs-price.
+
+    Only used when ``buy_action`` is built with ``fidelity="implicit"``; the default
+    funnel buys explicitly, so emergent conversion ignores this.
+    """
     e = max(engagement, EPS)
     return float(sigmoid(math.log(BUY_BASE) + BUY_SLOPE * math.log(e)))
 
 
 def p_list(engagement):
+    """P(a visiting user lists an item this session)."""
     e = max(engagement, EPS)
     return float(sigmoid(math.log(LIST_BASE) + LIST_SLOPE * math.log(e)))
 
 
 def p_lead(engagement):
+    """P(contact a seller about a considered listing) — the lead step of negotiation."""
     e = max(engagement, EPS)
     return float(sigmoid(math.log(LEAD_BASE) + LEAD_SLOPE * math.log(e)))
 
 
 def p_bid(engagement):
+    """P(turn a lead into a bid), conditional on having made the lead."""
     e = max(engagement, EPS)
     return float(sigmoid(math.log(BID_BASE) + BID_SLOPE * math.log(e)))
 
 
 def p_churn(engagement):
+    """P(go dormant after a session) — note the MINUS slope: high engagement churns less."""
     e = max(engagement, EPS)
     return float(sigmoid(math.log(CHURN_BASE) - CHURN_SLOPE * math.log(e)))
 
 
 def _decide(p, rng):
+    """One Bernoulli trial: True with probability ``p``, drawn from ``rng``."""
     return rng.random() < p
 
 
@@ -111,6 +150,9 @@ def population_arrival(env, market, rng):
 
 
 def reactivation(env, user, market, rng):
+    """Bring a dormant user back after an exponential delay, then restart its
+    lifecycle. Scheduled by ``churn_user``; mean delay is ``reactivation_scale_days``.
+    """
     yield env.timeout(float(rng.exponential(max(market.spec.reactivation_scale_days, EPS))))
     user.state = "active"
     market.emit("reactivated", actor_id=user.id)
@@ -118,6 +160,10 @@ def reactivation(env, user, market, rng):
 
 
 def listing_expiry(env, listing, market):
+    """Take a listing off the market at its TTL (``listing_ttl_days``) if still
+    unsold. A no-op once it has already sold out. Skipped entirely when the spec
+    sets ``listing_ttl_days = None``.
+    """
     yield env.timeout(max(market.spec.listing_ttl_days, EPS))
     if listing.is_live:
         listing.is_live = False

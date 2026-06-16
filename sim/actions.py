@@ -39,20 +39,30 @@ from sim.agents import (BID_BIAS, SESSION_K, _decide, p_bid, p_buy, p_lead,  # n
                         p_list, p_view)
 
 
+# Funnel steps. Each is an Action's `run`: (agent, market, rng, session) -> None,
+# reading/writing the per-session dict to hand state to later steps. They never
+# return; their effects are events + mutations + (for some) session keys.
+
 def _act_visit(agent, market, rng, session):
+    """Open the session: the agent shows up. Always fires (it's the entry point)."""
     market.emit("visit", actor_id=agent.id)
 
 
 def _act_list(agent, market, rng, session):
+    """Seller side: with engagement-driven probability, create a priced listing."""
     if _decide(p_list(agent.engagement), rng):
         market.create_listing_for(agent, rng)
 
 
 def _act_search(agent, market, rng, session):
+    """The marketplace's ranking step: put the top-K live listings (by quality) into
+    ``session['candidates']`` for the agent to consider."""
     session["candidates"] = market.match_listings(SESSION_K)
 
 
 def _act_view(agent, market, rng, session):
+    """View each candidate with probability ``p_view``; collect the seen ones into
+    ``session['viewed']`` and bump per-listing view counts + emit ``view`` events."""
     viewed = []
     for listing in session.get("candidates", []):
         if not listing.is_live:
@@ -66,6 +76,8 @@ def _act_view(agent, market, rng, session):
 
 
 def _act_consideration(agent, market, rng, session):
+    """Form the consideration set the buy/negotiate steps act on. Currently a copy of
+    everything viewed; the seam where top-k-by-willingness curation will plug in."""
     session["consideration"] = list(session.get("viewed", []))
 
 
@@ -87,6 +99,14 @@ def buy_action(fidelity="explicit"):
 
 
 def _act_negotiate(agent, market, rng, session):
+    """The classifieds add-on: lead -> bid -> Proposal, as a branch before ``buy``.
+
+    For each considered listing the agent may make a lead (``p_lead``) and then a bid
+    (``p_bid``). A bid creates a ``Proposal`` at ``BID_BIAS * ask`` and drops it in the
+    seller's inbox for latency-driven settlement. Each touched listing id is recorded
+    in ``session['negotiated']`` so the later ``buy`` step skips it — the two paths to
+    a sale don't double-count the same listing in one session.
+    """
     negotiated = session.setdefault("negotiated", set())
     for listing in session.get("consideration", []):
         if not listing.is_live or listing.id in negotiated:
@@ -110,6 +130,11 @@ def _act_negotiate(agent, market, rng, session):
 
 
 def negotiate_action():
+    """Build the negotiation ``Action`` to pass in ``spec.actions``.
+
+    A branch inserted before ``buy`` (it claims listings via session state rather
+    than gating buy). Opt-in: omit it for a plain visit->...->buy funnel.
+    """
     return Action("negotiate", _act_negotiate, requires=("consideration",),
                   before="buy", mode="branch")
 
@@ -134,6 +159,11 @@ def assemble_actions(base, extras):
 
 
 def default_consumer_funnel():
+    """The base funnel every market starts with: visit -> list -> search -> view ->
+    consideration -> buy, wired by ``requires``. ``buy`` is explicit (willingness vs
+    price). Returned fresh each call; extras from the spec are woven in by
+    ``assemble_actions``. Don't edit the base steps — add Actions instead (open/closed).
+    """
     return [
         Action("visit", _act_visit),
         Action("list", _act_list, requires=("visit",)),
