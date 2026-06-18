@@ -82,19 +82,23 @@ def _act_consideration(agent, market, rng, session):
 
 
 def buy_action(fidelity="explicit"):
-    """The buy step. explicit: buy iff willingness >= price (emergent, no rng).
-    implicit: the legacy p_buy(engagement) coin-flip (a cheap stand-in)."""
+    """The buy step. The agent makes ONE rational choice: the single utility-maximizing
+    listing in its consideration set (argmax of wtp - price, excluding negotiated /
+    sold-out ones). explicit: buy that best iff its surplus >= 0 (emergent, no rng).
+    implicit: pick the same best but gate on the p_buy(engagement) coin flip (a cheap
+    stand-in). At most one purchase per session."""
     def _run(agent, market, rng, session):
         negotiated = session.get("negotiated", set())
-        for listing in session.get("consideration", []):
-            if not listing.is_live or listing.id in negotiated:
-                continue
-            if fidelity == "implicit":
-                bought = _decide(p_buy(agent.engagement), rng)
-            else:
-                bought = market.wtp(agent, listing) >= listing.price
-            if bought:
-                market.transact(agent, listing)
+        candidates = [l for l in session.get("consideration", [])
+                      if l.is_live and l.id not in negotiated]
+        if not candidates:
+            return
+        best = max(candidates, key=lambda l: (market.wtp(agent, l) - l.price, l.id))
+        if fidelity == "implicit":
+            if _decide(p_buy(agent.engagement), rng):
+                market.transact(agent, best)
+        elif market.wtp(agent, best) - best.price >= 0:
+            market.transact(agent, best)
     return Action("buy", _run, requires=("consideration",), fidelity=fidelity)
 
 

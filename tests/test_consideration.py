@@ -89,3 +89,63 @@ def test_market_exposes_curation_from_spec():
     m = Market(env=simpy.Environment(), rng=np.random.default_rng(0),
                clock=Clock(spec.start), recorder=EventRecorder(), spec=spec)
     assert m.curation is strat
+
+
+def _market_with_buyer(value_factor=1.0):
+    import numpy as np
+    import simpy
+    from datetime import datetime
+    from sim.engine import Clock, Market
+    from sim.events import EventRecorder
+    from sim.spec import MarketplaceSpec
+    spec = MarketplaceSpec(start=datetime(2026, 1, 1), n_seed_users=0)
+    m = Market(env=simpy.Environment(), rng=np.random.default_rng(0),
+               clock=Clock(spec.start), recorder=EventRecorder(), spec=spec)
+    buyer = m.spawn_user()
+    buyer.value_factor = value_factor
+    return m, buyer
+
+
+def test_explicit_buys_single_best_surplus_only():
+    from sim.actions import buy_action
+    m, buyer = _market_with_buyer(value_factor=1.0)            # wtp == quality
+    a = m.add_listing(quality=500.0, price=400.0, seller_id=999)    # surplus +100
+    best = m.add_listing(quality=500.0, price=300.0, seller_id=999)  # surplus +200 (the pick)
+    dear = m.add_listing(quality=500.0, price=600.0, seller_id=999)  # surplus -100
+    session = {"consideration": [a, best, dear]}
+    buy_action("explicit").run(buyer, m, m.rng, session)
+    assert best.transactions == 1 and not best.is_live          # only the best is bought
+    assert a.transactions == 0 and dear.transactions == 0       # at most one purchase
+
+
+def test_explicit_buys_nothing_when_all_underwater():
+    from sim.actions import buy_action
+    m, buyer = _market_with_buyer(value_factor=1.0)
+    x = m.add_listing(quality=500.0, price=600.0, seller_id=999)
+    y = m.add_listing(quality=500.0, price=700.0, seller_id=999)
+    session = {"consideration": [x, y]}
+    buy_action("explicit").run(buyer, m, m.rng, session)
+    assert x.transactions == 0 and y.transactions == 0
+
+
+def test_buy_excludes_negotiated_listings():
+    from sim.actions import buy_action
+    m, buyer = _market_with_buyer(value_factor=1.0)
+    claimed = m.add_listing(quality=500.0, price=300.0, seller_id=999)  # best, but negotiated
+    other = m.add_listing(quality=500.0, price=450.0, seller_id=999)    # the fallback pick
+    session = {"consideration": [claimed, other], "negotiated": {claimed.id}}
+    buy_action("explicit").run(buyer, m, m.rng, session)
+    assert claimed.transactions == 0                            # excluded
+    assert other.transactions == 1                              # best of the rest
+
+
+def test_implicit_buys_at_most_the_single_best():
+    from sim.actions import buy_action
+    m, buyer = _market_with_buyer(value_factor=1.0)
+    buyer.engagement = 1e6                                      # p_buy ~ 1 -> coin flip passes
+    a = m.add_listing(quality=400.0, price=10.0, seller_id=999)
+    best = m.add_listing(quality=900.0, price=10.0, seller_id=999)   # highest surplus
+    session = {"consideration": [a, best]}
+    buy_action("implicit").run(buyer, m, m.rng, session)
+    assert best.transactions == 1
+    assert a.transactions == 0                                  # only one, and it's the best
