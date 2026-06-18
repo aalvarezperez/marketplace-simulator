@@ -93,7 +93,7 @@ def buy_action(fidelity="explicit"):
                       if l.is_live and l.id not in negotiated]
         if not candidates:
             return
-        best = max(candidates, key=lambda l: (market.wtp(agent, l) - l.price, l.id))
+        best = max(candidates, key=lambda l: (market.wtp(agent, l) - l.price, -l.id))  # tie -> lowest id (older listing), matching curation
         if fidelity == "implicit":
             if _decide(p_buy(agent.engagement), rng):
                 market.transact(agent, best)

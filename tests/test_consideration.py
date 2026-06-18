@@ -156,3 +156,15 @@ def test_curation_strategy_is_exported():
     from sim import quality_ranked_shortlist as exported
     assert "quality_ranked_shortlist" in sim.__all__
     assert exported is quality_ranked_shortlist
+
+
+def test_explicit_buy_tie_breaks_to_lowest_id():
+    from sim.actions import buy_action
+    m, buyer = _market_with_buyer(value_factor=1.0)
+    # two identical surplus listings (same quality & price) -> tie -> lowest id wins
+    first = m.add_listing(quality=500.0, price=300.0, seller_id=999)   # lower id
+    second = m.add_listing(quality=500.0, price=300.0, seller_id=999)  # higher id
+    assert first.id < second.id
+    session = {"consideration": [second, first]}                      # order shouldn't matter
+    buy_action("explicit").run(buyer, m, m.rng, session)
+    assert first.transactions == 1 and second.transactions == 0
