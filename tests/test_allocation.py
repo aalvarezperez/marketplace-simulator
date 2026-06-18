@@ -296,3 +296,20 @@ def test_store_rejects_duplicate_experiment_keys():
     dup2 = Experiment(key="x", variants={"CONTROL": 0.5, "B": 0.5})
     with pytest.raises(ValueError):
         AssignmentStore([dup1, dup2], _FakeMarket())
+
+
+from sim.allocation import Exposure
+
+
+def test_experiment_auto_expose_defaults_true():
+    e = Experiment(key="wtp", variants={"CONTROL": 0.5, "B": 0.5})
+    assert e.auto_expose is True
+    e2 = Experiment(key="reco", variants={"A": 1.0}, auto_expose=False)
+    assert e2.auto_expose is False
+
+
+def test_exposure_row_fields():
+    ex = Exposure(experiment="wtp", subject_id=7, variant="B", cluster=3,
+                  window=None, exposed_at=2.5)
+    assert (ex.experiment, ex.subject_id, ex.variant, ex.cluster,
+            ex.window, ex.exposed_at) == ("wtp", 7, "B", 3, None, 2.5)

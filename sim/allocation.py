@@ -94,6 +94,7 @@ class Experiment:
     eligibility: object = None           # predicate(subject, market) -> bool; default everyone
     subject_key: object = None           # subject -> hashing key; default lambda s: s.id
     cluster_key: object = None           # subject -> cluster key; default lambda s: getattr(s,'cluster',0)
+    auto_expose: bool = True             # True: reading the variant also logs an exposure (Eppo default)
 
     def __post_init__(self):
         if self.strategy is None:
@@ -117,6 +118,22 @@ class Assignment:
     assigned_at: float        # sim-time of first resolution
     valid_from: float         # when this assignment takes effect (None = open)
     valid_to: float           # when it stops (None = open-ended)
+
+
+@dataclass(frozen=True)
+class Exposure:
+    """An exposure row: a unit actually encountered experiment E in this window.
+
+    By default emitted coincident with allocation (reading the variant exposes you);
+    with auto_expose=False it is emitted only when market.expose is called at the
+    chosen surface, so exposure becomes a strict subset of allocation.
+    """
+    experiment: str
+    subject_id: object
+    variant: str
+    cluster: object
+    window: object            # None for time-invariant designs; window index for switchback
+    exposed_at: float         # sim-time of first exposure (== assigned_at when auto-exposed)
 
 
 class AssignmentStore:
