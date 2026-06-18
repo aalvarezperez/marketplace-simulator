@@ -50,11 +50,17 @@ class Market:
         return _run_session_actions(user, self, rng, self.actions)
 
     def variant(self, subject, exp_key, default=None):
-        """Look up ``subject``'s variant for experiment ``exp_key`` at the current
-        sim-time. Resolves + caches + logs on first read (per switchback window);
-        O(1) thereafter. Returns ``default`` when the experiment is unknown,
-        inactive, or the subject is ineligible. This is the whole allocation surface."""
-        return self.assignment_store.resolve(exp_key, subject, self.env.now, default)
+        """Look up ``subject``'s variant for ``exp_key`` at the current sim-time.
+        By default (auto_expose=True) reading also logs an exposure (the Eppo
+        getAssignment model); for auto_expose=False experiments this allocates only.
+        Returns ``default`` when the experiment is unknown, inactive, or ineligible."""
+        return self.assignment_store.read(exp_key, subject, self.env.now, default)
+
+    def expose(self, subject, exp_key, default=None):
+        """Explicitly expose ``subject`` to ``exp_key`` at the current sim-time — the
+        surface for auto_expose=False experiments. Allocates if needed, logs the
+        exposure once per (exp, subject, window), and returns the variant."""
+        return self.assignment_store.expose(exp_key, subject, self.env.now, default)
 
     def emit(self, event_type, actor_id=None, entity_id=None, other_id=None, payload=None):
         """Record an ``Event`` stamped with the current calendar time. Behavioral

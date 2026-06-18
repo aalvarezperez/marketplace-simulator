@@ -375,3 +375,44 @@ def test_read_auto_exposes_only_when_opted_in():
     # the quiet one exposes only on an explicit expose()
     store.expose("quiet", _Subj(2), time=0.0)
     assert {ex.experiment for ex in store.exposures()} == {"auto", "quiet"}
+
+
+def test_market_variant_auto_exposes_end_to_end():
+    def uplift(agent, listing, market):
+        base = listing.quality * agent.value_factor
+        return base * 1.2 if market.variant(agent, "wtp") == "B" else base
+
+    def build():
+        spec = MarketplaceSpec(
+            start=datetime(2026, 1, 1), n_seed_users=300, until=5.0, seed=11,
+            willingness=uplift,
+            experiments=[Experiment(key="wtp", variants={"CONTROL": 0.5, "B": 0.5})])
+        return Marketplace.from_spec(spec)
+
+    mkt = build()
+    events = mkt.run()
+    assert [e for e in events if e.event_type == "assignment"]
+    assert [e for e in events if e.event_type == "exposure"]        # auto-exposed
+    assert mkt.market.assignment_store.exposures()                  # ledger populated
+    # Determinism holds with exposure events in the stream.
+    a = [(e.event_type, e.actor_id, e.entity_id) for e in build().run()]
+    b = [(e.event_type, e.actor_id, e.entity_id) for e in build().run()]
+    assert a == b
+
+
+def test_market_auto_expose_false_defers_exposure():
+    spec = MarketplaceSpec(
+        start=datetime(2026, 1, 1), n_seed_users=10, until=1.0, seed=3,
+        experiments=[Experiment(key="reco", variants={"CONTROL": 0.5, "B": 0.5},
+                                auto_expose=False)])
+    mkt = Marketplace.from_spec(spec)
+    store = mkt.market.assignment_store
+    user = mkt.market.users[0]
+    # Reading the variant allocates but does NOT expose.
+    v = mkt.market.variant(user, "reco")
+    assert v in ("CONTROL", "B")
+    assert store.ledger() and not store.exposures()
+    # Explicit expose at the surface logs the exposure.
+    v2 = mkt.market.expose(user, "reco")
+    assert v2 == v
+    assert len(store.exposures()) == 1
