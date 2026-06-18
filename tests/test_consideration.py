@@ -149,3 +149,10 @@ def test_implicit_buys_at_most_the_single_best():
     buy_action("implicit").run(buyer, m, m.rng, session)
     assert best.transactions == 1
     assert a.transactions == 0                                  # only one, and it's the best
+
+
+def test_curation_strategy_is_exported():
+    import sim
+    from sim import quality_ranked_shortlist as exported
+    assert "quality_ranked_shortlist" in sim.__all__
+    assert exported is quality_ranked_shortlist
