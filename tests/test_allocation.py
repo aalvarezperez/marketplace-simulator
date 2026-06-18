@@ -416,3 +416,9 @@ def test_market_auto_expose_false_defers_exposure():
     v2 = mkt.market.expose(user, "reco")
     assert v2 == v
     assert len(store.exposures()) == 1
+
+
+def test_exposure_is_exported():
+    import sim
+    from sim import Exposure
+    assert "Exposure" in sim.__all__

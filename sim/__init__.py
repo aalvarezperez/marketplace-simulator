@@ -9,7 +9,8 @@
 """
 from sim.actions import negotiate_action
 from sim.allocation import (Assignment, AssignmentStore, ClusterRandomization,
-                            Experiment, SimpleRandomization, Switchback, bucket)
+                            Experiment, Exposure, SimpleRandomization, Switchback,
+                            bucket)
 from sim.engine import Marketplace
 from sim.pricing import default_pricing
 from sim.spec import MarketplaceSpec, Property
@@ -19,5 +20,5 @@ __all__ = [
     "Marketplace", "MarketplaceSpec", "Property",
     "negotiate_action", "default_pricing", "default_willingness",
     "Experiment", "SimpleRandomization", "ClusterRandomization", "Switchback",
-    "AssignmentStore", "Assignment", "bucket",
+    "AssignmentStore", "Assignment", "Exposure", "bucket",
 ]
