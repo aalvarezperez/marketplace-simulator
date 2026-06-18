@@ -313,3 +313,65 @@ def test_exposure_row_fields():
                   window=None, exposed_at=2.5)
     assert (ex.experiment, ex.subject_id, ex.variant, ex.cluster,
             ex.window, ex.exposed_at) == ("wtp", 7, "B", 3, None, 2.5)
+
+
+def test_expose_logs_assignment_and_exposure_once():
+    exp = Experiment(key="wtp", variants={"CONTROL": 0.5, "B": 0.5})
+    store, m = _store([exp])
+    s = _Subj(id=1, cluster=0)
+    v1 = store.expose("wtp", s, time=0.0)
+    v2 = store.expose("wtp", s, time=0.5)         # same window -> idempotent
+    assert v1 == v2 and v1 in ("CONTROL", "B")
+    assert len(store.exposures()) == 1            # exposure logged once
+    assert len(store.ledger()) == 1              # allocation still once
+    assert sum(1 for e in m.events if e[0] == "exposure") == 1
+    assert sum(1 for e in m.events if e[0] == "assignment") == 1
+    ex = store.exposures()[0]
+    assert ex.experiment == "wtp" and ex.subject_id == 1 and ex.exposed_at == 0.0
+
+
+def test_expose_unknown_or_inactive_logs_no_exposure():
+    exp = Experiment(key="e", variants={"A": 1.0}, start=5.0, end=10.0)
+    store, m = _store([exp])
+    assert store.expose("missing", _Subj(1), time=0.0) is None      # unknown experiment
+    assert store.expose("e", _Subj(1), time=0.0) is None            # before start
+    assert store.exposures() == []
+    assert not [e for e in m.events if e[0] == "exposure"]
+
+
+def test_expose_ineligible_logs_no_exposure():
+    exp = Experiment(key="e", variants={"A": 1.0},
+                     eligibility=lambda subj, mkt: subj.id % 2 == 0)
+    store, m = _store([exp])
+    assert store.expose("e", _Subj(3), time=0.0) is None
+    assert store.exposures() == []
+    assert store.expose("e", _Subj(2), time=0.0) == "A"
+    assert len(store.exposures()) == 1
+
+
+def test_switchback_exposes_once_per_window():
+    exp = Experiment(key="sb", variants={"CONTROL": 0.5, "B": 0.5},
+                     strategy=Switchback(period=1.0))
+    store, m = _store([exp])
+    s = _Subj(id=1)
+    store.expose("sb", s, time=0.2)               # window 0
+    store.expose("sb", s, time=0.7)               # window 0 -> idempotent
+    store.expose("sb", s, time=1.3)               # window 1 -> new exposure
+    assert len(store.exposures()) == 2
+    assert sorted(ex.window for ex in store.exposures()) == [0, 1]
+
+
+def test_read_auto_exposes_only_when_opted_in():
+    auto = Experiment(key="auto", variants={"A": 1.0})                  # auto_expose=True
+    quiet = Experiment(key="quiet", variants={"A": 1.0}, auto_expose=False)
+    store, m = _store([auto, quiet])
+    store.read("auto", _Subj(1), time=0.0)
+    store.read("quiet", _Subj(2), time=0.0)
+    # both allocated...
+    assert len(store.ledger()) == 2
+    # ...but only the auto_expose experiment logged an exposure
+    exposed = {ex.experiment for ex in store.exposures()}
+    assert exposed == {"auto"}
+    # the quiet one exposes only on an explicit expose()
+    store.expose("quiet", _Subj(2), time=0.0)
+    assert {ex.experiment for ex in store.exposures()} == {"auto", "quiet"}

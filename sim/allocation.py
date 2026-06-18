@@ -151,6 +151,8 @@ class AssignmentStore:
         self._market = market
         self._cache = {}     # (exp_key, subject_id, window) -> Assignment   <- O(1) lookup
         self._ledger = []    # append-only list[Assignment]                  <- the persistent truth
+        self._exposed = set()        # {(exp_key, subject_id, window)} -> exposed once per window
+        self._exposure_ledger = []   # append-only list[Exposure]
 
     def resolve(self, exp_key, subject, time, default=None):
         exp = self._exp.get(exp_key)
@@ -196,3 +198,42 @@ class AssignmentStore:
     def ledger(self):
         """The full append-only assignment record (for export to a dataframe)."""
         return list(self._ledger)
+
+    def expose(self, exp_key, subject, time, default=None):
+        """Allocate (via resolve) and log an exposure once per (exp, subject, window).
+
+        Returns the variant. Logs nothing when the unit is not actually in the
+        experiment (unknown / inactive / ineligible -> resolve left no cache entry).
+        Idempotent per window: repeat calls return the variant but add no new row/event.
+        """
+        variant = self.resolve(exp_key, subject, time, default)
+        exp = self._exp.get(exp_key)
+        if exp is None:
+            return variant
+        window = exp.strategy.window(time)
+        ckey = (exp_key, subject.id, window)
+        if ckey not in self._cache:           # not actually allocated (inactive/ineligible)
+            return variant
+        if ckey not in self._exposed:
+            self._exposed.add(ckey)
+            a = self._cache[ckey]             # the Assignment resolve just created/returned
+            ex = Exposure(a.experiment, a.subject_id, a.variant, a.cluster, a.window, time)
+            self._exposure_ledger.append(ex)
+            self._market.emit("exposure", actor_id=subject.id, payload={
+                "experiment": a.experiment, "variant": a.variant,
+                "cluster": a.cluster, "window": a.window,
+            })
+        return variant
+
+    def exposures(self):
+        """The full append-only exposure record (for export to a dataframe)."""
+        return list(self._exposure_ledger)
+
+    def read(self, exp_key, subject, time, default=None):
+        """The default public read path: allocate, and auto-expose iff the experiment
+        opts in (auto_expose). Keeps the routing inside the store so the engine never
+        touches private state."""
+        exp = self._exp.get(exp_key)
+        if exp is not None and exp.auto_expose:
+            return self.expose(exp_key, subject, time, default)
+        return self.resolve(exp_key, subject, time, default)
