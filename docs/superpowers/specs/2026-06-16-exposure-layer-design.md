@@ -24,13 +24,31 @@ variant allocates only; the user fires exposure deliberately at the real surface
 This is still a pure data-generation concern: the engine emits `exposure` events and keeps an
 exposure ledger; it computes no statistics and defines no treatment effect.
 
+### This mirrors how Eppo's SDKs work (the chosen model)
+
+Eppo's SDK fuses assignment and exposure: you call `getAssignment(flag, subject, ...)` **at the
+point of exposure** (where the user actually hits the treated surface), and the SDK both buckets the
+subject *and* fires an `assignmentLogger` side-effect that becomes the exposure row — deduped, and
+skipped when the subject isn't in an allocation. Eppo's headline guidance is precisely *"call it at
+the exposure point, not eagerly"*, so logging == "actually saw it".
+
+Our design is the same:
+- `market.variant(subject, key)` is Eppo's `getAssignment` — by default it allocates **and** logs the
+  exposure. **The exposure point is the call site**: you set it by placing this call where the
+  treated surface is, exactly as in Eppo. There is no separate "exposure config" — placement *is* the
+  configuration.
+- The `EventRecorder` / `emit("exposure", ...)` is our `assignmentLogger` sink.
+- `auto_expose=False` is an **escape hatch Eppo barely exposes**: read the variant *without* logging
+  an exposure (allocate quietly), then fire the exposure deliberately later via `market.expose(...)`
+  at the true surface. Use it only when you must peek at the variant before the exposure point.
+
 ### Timing model (resolved during brainstorming)
 
 Allocation is **lazy** — it materializes on the first read of `market.variant` (typically from the
 user's treatment-effect callable, which is the realistic exposure surface). Accepted consequence:
 no read ⇒ no allocation ⇒ no exposure. By default, that same first read also emits the exposure, so
-allocation and exposure coincide (same sim-time, same session). `market.expose` lets a "further
-defined" experiment decouple them — exposure fires later, at a chosen surface, as a subset.
+allocation and exposure coincide (same sim-time, same session) — the Eppo behavior. `market.expose`
+(with `auto_expose=False`) decouples them — exposure fires later, at a chosen surface, as a subset.
 
 ---
 
@@ -159,21 +177,36 @@ variant is literally named like the `default` value.
 
 `market.expose` takes `subject` first, matching `market.variant`.
 
-**Usage:**
+**Setting the exposure point.** There is no exposure-point config — like Eppo, **the point is the
+call site**. You "set" exposure by placing the read where the treated surface is, and you express the
+"logic" with ordinary code around it (it has full access to the listing / slot / session state in
+scope, which a config field could not see).
+
 ```python
-# default (auto_expose=True): reading the variant exposes you
+# DEFAULT (auto_expose=True) — the Eppo getAssignment pattern: read = allocate + log exposure.
+# The exposure point is wherever you put this call (here, the willingness surface).
 def willingness(agent, listing, market):
     base = listing.quality * agent.value_factor
-    return base * 1.15 if market.variant(agent, "wtp") == "B" else base   # allocate + expose
+    return base * 1.15 if market.variant(agent, "wtp") == "B" else base   # allocate + expose, here
 
-# further defined (auto_expose=False): allocate quietly, expose only at the real surface
+# ESCAPE HATCH (auto_expose=False) — peek without logging, then expose at the true surface.
+# Use only when you must read the variant before the exposure point.
 spec = MarketplaceSpec(..., experiments=[
     Experiment(key="reco", variants={"CONTROL": .5, "B": .5}, auto_expose=False)])
-def some_action(agent, market, rng, session):
-    if shown_in_reco_slot(...):
-        v = market.expose(agent, "reco")          # exposure = subset of allocation, fired here
-        ...
+
+def reco_action(agent, market, rng, session):
+    for listing in session.get("consideration", []):
+        if listing_in_reco_slot(listing):         # <- exposure LOGIC: arbitrary code, sees local state
+            v = market.expose(agent, "reco")      # <- exposure POINT: the call site; logs once/window
+            if v == "B":
+                ...apply treatment...
 ```
+
+Declarative alternatives (an `expose_when` predicate on the `Experiment`, or an `expose_on='action'`
+funnel hook) were considered and rejected: Eppo has neither, the predicate can't see local action
+state without threading it back to the call site anyway, and the action hook would touch the funnel
+and mismatch per-listing granularity. The call-site primitive subsumes both and can be sugared later
+if real repetition appears. See §6.
 
 ---
 
@@ -198,9 +231,11 @@ def some_action(agent, market, rng, session):
 - **Treatment effects** — what a variant does to behavior remains the user's swappable callable.
 - **Statistics** — estimation / bias / power / Type-I all downstream (R / notebook).
 - **Exposure-frequency counting** — once-per-window only; no per-encounter exposure log.
-- **Declarative `expose_on='action'` hooks** — exposure is wired by where the user calls
-  `market.expose`, matching the lazy "consequence of an action" model. No post-action hook
-  machinery, no funnel changes.
+- **Declarative exposure config** — neither an `expose_on='action'` funnel hook nor an `expose_when`
+  predicate on the `Experiment`. Exposure is wired by *where you call* `market.variant`/`market.expose`
+  (the Eppo model), matching the lazy "consequence of an action" model. No post-action hook
+  machinery, no funnel changes. Either can be added later as sugar over the call-site primitive if a
+  real need appears.
 - **Eager allocation** — allocation stays lazy (materialized on first read), per the allocation spec.
 
 ---
