@@ -35,6 +35,7 @@ class Market:
         self.actions = assemble_actions(default_consumer_funnel(), spec.actions)
         self.willingness = spec.willingness
         self.pricing = spec.pricing
+        self.curation = spec.curation
         self.markdown_pct = spec.markdown_pct
         self.experiments = spec.experiments
         self.assignment_store = AssignmentStore(spec.experiments, self)

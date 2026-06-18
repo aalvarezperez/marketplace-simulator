@@ -51,3 +51,41 @@ def test_deterministic_for_fixed_rng():
     a = quality_ranked_shortlist(_A(7.0), viewed, None, np.random.default_rng(5))
     b = quality_ranked_shortlist(_A(7.0), viewed, None, np.random.default_rng(5))
     assert [l.id for l in a] == [l.id for l in b]
+
+
+def test_spec_default_curation_is_quality_ranked_shortlist():
+    from datetime import datetime
+    from sim.spec import MarketplaceSpec
+    spec = MarketplaceSpec(start=datetime(2026, 1, 1))
+    assert spec.curation is quality_ranked_shortlist
+
+
+def test_act_consideration_uses_market_curation():
+    # A custom curation strategy must be what populates session["consideration"].
+    from sim.actions import _act_consideration
+
+    sentinel = [object(), object()]
+
+    class _M:
+        def curation(self, agent, viewed, market, rng):
+            assert market is self
+            return sentinel
+
+    session = {"viewed": [object(), object(), object()]}
+    _act_consideration(agent=None, market=_M(), rng=None, session=session)
+    assert session["consideration"] is sentinel
+
+
+def test_market_exposes_curation_from_spec():
+    import numpy as np
+    import simpy
+    from datetime import datetime
+    from sim.engine import Clock, Market
+    from sim.events import EventRecorder
+    from sim.spec import MarketplaceSpec
+
+    strat = lambda agent, viewed, market, rng: list(viewed)[:1]
+    spec = MarketplaceSpec(start=datetime(2026, 1, 1), n_seed_users=0, curation=strat)
+    m = Market(env=simpy.Environment(), rng=np.random.default_rng(0),
+               clock=Clock(spec.start), recorder=EventRecorder(), spec=spec)
+    assert m.curation is strat

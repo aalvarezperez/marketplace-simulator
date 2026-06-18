@@ -76,9 +76,9 @@ def _act_view(agent, market, rng, session):
 
 
 def _act_consideration(agent, market, rng, session):
-    """Form the consideration set the buy/negotiate steps act on. Currently a copy of
-    everything viewed; the seam where top-k-by-willingness curation will plug in."""
-    session["consideration"] = list(session.get("viewed", []))
+    """Form the consideration set via the market's curation strategy — a shortlist of
+    what was viewed, which the buy/negotiate steps then act on."""
+    session["consideration"] = market.curation(agent, session.get("viewed", []), market, rng)
 
 
 def buy_action(fidelity="explicit"):

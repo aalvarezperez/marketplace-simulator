@@ -31,6 +31,7 @@ from scipy.stats import gamma, lognorm, norm, poisson
 
 from sim.pricing import default_pricing
 from sim.willingness import default_willingness
+from sim.consideration import quality_ranked_shortlist
 from sim.allocation import Experiment, SimpleRandomization
 
 
@@ -87,6 +88,7 @@ class MarketplaceSpec:
         default_factory=lambda: Property(lognorm(s=0.3, scale=1.0)))
     willingness: object = default_willingness
     pricing: object = default_pricing
+    curation: object = quality_ranked_shortlist
     seller_patience: Property = None    # days unsold before a markdown; default set in __post_init__
     markdown_pct: float = 0.1
     experiments: list = field(default_factory=list)     # allocation Experiment registry
